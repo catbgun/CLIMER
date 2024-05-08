@@ -1,0 +1,485 @@
+---
+title: "CLIMER data analysis"
+output: html_notebook
+---
+
+```{r setup, include=FALSE, results = FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+*Installation of packages* 
+```{r}
+#install.packages(c("ggplot2", "Rmisc", "dplyr" "scales", "pastecs"))
+Packages <- c("ggplot2", "Rmisc", "dplyr", "scales", "pastecs")
+lapply(Packages, library, character.only = TRUE)
+```
+
+### Load Data
+```{r Load file}
+d <- read.table("Copy of Climer_Biodeg_3.txt", sep = "\t", header = TRUE, fill=TRUE)
+```
+
+```{r}
+Bulk <- subset(d, Fraction = Bulk)
+
+DOC <- select(Bulk, Date, Lake, DOC)
+summary(DOC)
+tapply(DOC$DOC, DOC$Lake, summary) 
+
+```
+
+
+## Data preparation
+- Remove data from Stevie due to long storage time (< 10 months)
+- ordering factor variables
+```{r Data preparation}
+d$Date <- as.Date(d$Date,format = "%d.%m.%Y")
+d<-d[!(d$Student=="Stevie"),]
+
+#d<-d[!(d$Fraction=="Bulk"),]
+#d<-d[(d$Replica=="1"),] #Why only look at this? someone without replica
+#d<-d[(d$Fraction=="HMW"),] # look at LMW data with high variation
+#d <- subset(d, Fraction =="LMW" & Lake == "Inlet")
+
+d$Lake <- factor(d$Lake,
+                 levels = c("Inlet","Hypolimnion", "Outlet"),ordered = TRUE)
+d$Fraction <- factor(d$Fraction,
+                     levels = c("LMW","HMW", "Bulk"),ordered = TRUE)
+d$Month <- factor(d$Month,
+                  levels = c("September_17","April_17", "June_18"),ordered = TRUE)
+d$Month1 <- factor(d$Month1,
+                  levels = c("January","May", "June", "September", "October"),ordered = TRUE)
+
+```
+
+
+```{r Plot to have a look at the data (?)}
+ggplot(d)+
+  geom_point(aes(x=Date, y=Hg.DOC, shape=Lake, color = factor(Month1)), size=5)+  
+  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
+  scale_color_discrete("Seasons:", labels = c("Mar - May", "Jun - Aug",
+                                              "Sep - Nov", "Dec - Feb"))
+
+    ylim(0, -0.013)
+    facet_grid(.~"%Y")
+
+
+```
+
+```{r #01 Barrplot, simple, FRACTIONS biodeg w errorbar. Is overall LMW more biodegradable than HMW?}
+
+hg <- select(d, Fraction, Lake, MeHg.DOC)
+head(hg)
+hg <- na.omit(hg)
+dx <- summarySE(hg, measurevar="MeHg.DOC", groupvar=c("Fraction", "Lake"))
+  head(d)
+head(dx)
+dx
+ggplot(dx) +
+  geom_bar( aes(x=Fraction, y=MeHg.DOC, fill=factor(Fraction)), stat="identity", alpha=0.7)+ 
+  geom_errorbar(aes(x=Fraction, ymin=MeHg.DOC-sd, ymax=MeHg.DOC+sd), width=0.2, colour="black", alpha=0.9, size=1)+
+  facet_grid(.~Lake)
+  ylim(0, -0.009)
+
+
+```
+```{r #011 STatistical testing}
+ ny <- d %>% select(Lake, Fraction, Rel.rate.DOC)
+  ny
+  
+  dx
+  res.aov <- aov(MeHg.DOC ~ Lake, data = d)
+  # Summary of the analysis
+  summary(res.aov)
+  TukeyHSD(res.aov)
+  nyt
+  t.test(y1,y2)
+  
+  t.test(d$Hg.DOC ~ d$Lake)
+  
+  head(nytt)
+```
+
+
+```{r #1) Barplot: seasonal, relative}
+hg <- select(d, sUVa, Lake)
+hg <- select(d, Month, Month1, Year, Rate.DOC.ave)
+head(Hg)
+hgC <- select(d, Hg, Hg.DOC, Lake, Fraction)
+hg = na.omit(hg)
+hgC = na.omit(hgC)
+dx <- summarySE(, measurevar="Rate.DOC.ave", groupvar=c("Month"))
+dx$miny <- dx$Rate.DOC.ave - dx$sd
+dx$maxy <- dx$Rate.DOC.ave + dx$sd
+head(dx)
+summary(hg)
+
+ggplot(d) + 
+  geom_bar(aes(x=Fraction, y=Rate.DOC.ave, fill=factor(Fraction)), stat="identity")
+    geom_errorbar(aes(x=Fraction, ymin=Rate.DOC.ave-sd, ymax=Rate.DOC.ave+sd),
+                width=.2,                    
+                position="identity", col="black")
+  theme(axis.text.y = element_text(size= 20, colour="black"),
+        axis.title.x = element_text(size = 20, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 24, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 26),
+        axis.text.x = element_text(angle=0, vjust=1, size = 24, colour="black"),
+        plot.title=element_text(size=30))+
+  labs(title = "Hg/DOC", x = "", y = "Hg:DOC (ng/mg)")
+
+#scale_fill_manual(values=c("#F8766D", "#7CAE00", "#00BFC4"))+
+```
+
+
+```{r #2) Old barplot: Rate.DOC per season, per fraction, per lake}
+ggplot(dx, aes(x=factor(Fraction), y=SAR, group=factor(Fraction), position="dodge")) + 
+  geom_bar(aes(x=factor(Fraction)), stat="summary", fun.y="mean")+
+  geom_errorbar(aes(ymin=SAR-sd, ymax=SAR+sd),
+                width=.2, colour="orange", size=1)+
+  labs(y="SAR (Abs 254nm/Abs 400nm)")+
+  ggtitle("Molecular size and aromaticicty")
+  theme(axis.text.y = element_text(size= 14),
+        axis.title.x = element_text(size = 18, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 18, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 18),
+        axis.text.x = element_text(angle=0, hjust=1, vjust=0.5, size = 16),
+        plot.title=element_text(size=20, face="bold"))+
+  facet_grid(. ~ factor(Lake))
+```
+```{r # 3) BOX PLOT: TOtal}
+head(d)
+ggplot(d, aes(x=factor(Fraction), fill=factor(Fraction), y=Rel.rate.DOC, group=factor(Fraction))) + 
+  geom_boxplot(size=1.2, width=1)+
+  labs(y="Relative Rate of DOC decay/DOC (%)",
+       x="")+
+  theme(axis.text.x = element_text(size = 28, angle=30, hjust=1, vjust=1, colour="black"),
+        axis.text.y = element_text(size= 20, colour="black"),
+        axis.title.x = element_text(size = 24, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 26, margin=margin(0,20,0,0), colour="black"),
+        strip.text.x = element_text(size = 30, face="plain"))+
+  facet_grid(. ~ factor(Lake))+
+    scale_fill_manual(values=c("#F8766D", "#7CAE00", "#00BFC4"))
+  ylim(0, -0.013)
+
+ggtitle("")
+head(d)
+axis.text.x = element_text(angle=90, hjust=1, vjust=0.5, size = 16)
+
+
+```
+#4) Correlation plots w biodegradation
+#Correlation plots, LMW/HMW, and INlet/Outlet
+```{r Correlation plots}
+d <- subset(d, Lake == "Inlet"| Lake =="Outlet")
+d <- subset(d, Fraction == "LMW"| Fraction =="HMW")
+head(d)
+#IMPORTANT!!! Correlation plot for biodeg and parameters
+ggplot(d, aes(E2_E3, Hg.DOC))+
+  geom_point(aes(colour=interaction(factor(Fraction)), shape=factor(Lake)), size=6)+
+  geom_smooth(method = "lm", se = FALSE, colour="black")
+  facet_grid(. ~ factor(Lake), scales="free")+
+  xlim(4, 6)
+  
+
+ylim(-0.013, 0)
+ theme(axis.text.y = element_text(size= 22),
+        axis.title.x = element_text(size = 24, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 24, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 32),
+        axis.text.x = element_text(angle=0, hjust=0.5, vjust=0, size = 24),
+        plot.title=element_text(size=30, face="bold"),
+        legend.text=element_text(size=26),
+        legend.title = element_blank())+
+    ylim(0, -0.013)
+  labs(title = "DOM Size and Aromaticity", x = "sUVa (Abs254:DOC*100)", y = "Rate of DOC decay:DOC (/h)")
+  ylim(0, -0.007)+
+  scale_colour_manual(values=c("#F8766D", "#7CAE00", "#00BFC4"))+
+  xlim(0, 8)
+
+xlim(0,8)
+scale_colour_manual(values=c("#fcbfba", "#a8e01d", "#10e2e8",
+                             "#F8766D","#7CAE00", "#00BFC4"))+
+
+  #IMPORTANT: PLOT for correlation between e.g. Hg with lake as facet and size colour coded
+  ggplot(d, aes(sUVa, Hg))+
+  geom_point(aes(colour=interaction(factor(Lake),factor(Fraction))), size=6)+
+  geom_smooth(method = "lm", se = FALSE, colour="black")+
+  facet_grid(. ~ factor(Lake))+
+  theme(axis.text.y = element_text(size= 22),
+        axis.title.x = element_text(size = 24, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 24, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 28),
+        axis.text.x = element_text(angle=0, hjust=0.5, vjust=0, size = 22),
+        plot.title=element_text(size=30, face="bold"),
+        legend.text=element_blank(),
+        legend.title = element_blank())+
+  labs(title = "DOM Size and Aromaticity", x = "E2_E3 (Abs 254:365nm)", y = "THg:DOC (ng/mg)")+
+  scale_colour_manual(values=c("#fcbfba", "#a8e01d", "#10e2e8",
+                               "#F8766D","#7CAE00", "#00BFC4"))
+facet_wrap(~variable, scales = "free_x")
+head(d)
+```
+
+```{r Hg analysis}
+# 5) Hg analysis
+#Divide Hg on DOC
+d <- transform(d, Hg.DOC = Hg / DOC)
+d <- transform(d, MeHg.DOC = MeHg / DOC)
+d
+d <- subset(d, Fraction =="HMW")
+d$Fraction <- factor(d$Fraction,
+                     levels = c("LMW","HMW"),ordered = TRUE)
+d$Lake <- factor(d$Lake,
+                 levels = c("Inlet","Hypolimnion", "Outlet"),ordered = TRUE)
+d$Month <- factor(d$Month,
+                  levels = c("September_16", "January_17", "April_17", "June_17", "September_17", "May_18", "September_18", "October_18"),ordered = TRUE)
+d<-d[(d$Hg< 8),]
+d<-d[(d$SAR< 15),]
+
+#dB <- subset(d, Fraction == "Bulk")
+head(d)
+d
+```
+
+```{r Barplot for Hg}
+
+```
+
+# 5.1( Barpoloy for Hg)
+library(Rmisc)
+library(ggplot2)
+
+library(dplyr)
+head(d)
+d<-d[(d$Month=="September_16" | d$Month=="September_17" | d$Month=="April_17"),]
+
+hg <- select(d, Rate.DOC.ave, Month, Lake, Fraction, DOC, Hg, Hg.DOC)
+mehg <- select(d, Lake, MeHg)
+head(mehg)
+#plot(MeHg~DOC, data=mehg)
+#fit <- lm(mehg$MeHg~ mehg$DOC)
+#abline(fit, col="red")
+#summary(fit)
+
+mehg = na.omit(mehg)
+hg = na.omit(hg)
+#IMPORTANT: MEHG BARPLOT
+dx <- summarySE(mehg, measurevar="MeHg", groupvar=c("Lake"))
+head(dx)
+d <- subset(d, Fraction == "LMW"| Fraction =="HMW")
+head(dx)
+ggplot(dx, aes(x=factor(Lake), y=MeHg, fill=Lake)) + 
+  geom_bar(stat = "summary", fun.y = "mean", position="stack")+
+  labs(y="MeHg (ng/L)",
+       x="", title="MeHg")+
+  theme(axis.text.x = element_text(size = 28, angle=30, hjust=1, vjust=1, colour="black"),
+        axis.text.y = element_text(size= 22, colour="black"),
+        axis.title.x = element_text(size = 20, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 24, margin=margin(0,20,0,0)),
+        plot.title = element_text( size = 28))+
+  #facet_grid(. ~ factor(Lake))+
+  geom_errorbar(aes(ymin=MeHg-sd, ymax=MeHg+sd),width=.2, colour="black")+
+  scale_fill_manual(values=c("#F8766D","#7CAE00", "#00BFC4"))
+
+
+inlet <- subset(d, Lake == "Inlet")
+hypo <- subset(d, Lake== "Hypolimnion")
+outlet <- subset(d, Lake == "Outlet")
+
+lmw <- subset(d, Fraction == "LMW")
+hmw <- subset(d, Fraction == "HMW")
+head(d)
+#Is there a correlation?
+plot(hypo$Hg.DOC~hypo$E2_E3)
+fit <- lm(hypo$Hg.DOC~ hypo$E2_E3)
+abline(fit, col="red")
+summary(fit)
+
+plot(HMW$Rate.DOC.ave~HMW$HI)
+
+fit <- lm(outlet$Rate.DOC.ave~ outlet$HI)
+#fit <- lm(LMW$Rate.DOC.ave~ LMW$sVISa+LMW$SAR+LMW$a)
+abline(fit, col="red")
+summary(fit)
+
+
+#Correlation analysis
+library(dplyr)
+b <- select(ou, DOC, pH, Cond, Hg, MeHg, sUVa, sVISa, SAR, E2_E3, HI, Hg.DOC, MeHg.DOC)
+library(Hmisc)
+rcorr(as.matrix(b), type="pearson")
+class(d)
+library("PerformanceAnalytics")
+chart.Correlation(b, histogram=TRUE, pch=19)
+head(d)
+
+
+#MAKKING THE CORRELATION ASSESSMENT
+library(tidyverse)
+library(ggpubr)
+theme_set(theme_pubr())
+ggplot(inl, aes(x = SAR, y = Hg.DOC)) +
+  geom_point() +
+  stat_smooth()+
+  stat_smooth(method = lm)
+
+model <- lm(Hg.DOC ~ sVISa, data = bu)
+model  
+summary(model)
+
+
+
+
+
+#Divide into lake location
+bu <- subset(d, Lake == "Inlet"| Lake =="Outlet")
+outlet <- subset(d, Lake == "Outlet")
+depth <- subset(d, Lake == "Hypolimnion")
+#d <- subset(d, Lake == "Inlet"| Lake =="Outlet")
+#Divide into DOM size fraction
+LMW <- subset(d, Fraction == "LMW")
+d <- subset(d, Fraction == "LMW"| Fraction =="HMW")
+HMW <- subset(d, Fraction == "HMW")
+Total <- subset(d, Fraction == "Bulk")
+#SUbset by both fraction and location: to see seasonal variation
+inl <- subset(d, Lake == "Inlet")
+ou <- subset(d, Lake == "Outlet")
+dep <- subset(HLMW, Lake == "Depth")
+plot(inlet$Rate.DOC.ave~inlet$sUVa)
+
+#Summarize data before plotting
+library(Rmisc)
+library(ggplot2)
+dx <- summarySE(d, measurevar="Rate.DOC.ave", groupvar=c("Fraction"))
+dx
+DOC <- summarySE(d, measurevar="DOC", groupvar=c("Lake", "Fraction"))
+DOC
+
+nyt<-ny[!(ny$Fraction=="HMW"),]
+nytt<-nyt[!(nyt$Lake=="Hypolimnion"),]
+head(ny)
+head(d)
+
+#STATISTICAL TESTING (do not summarise first)
+#Grubbs test
+library(outliers)
+grubbs.test(nytt$, type = 10, opposite = FALSE, two.sided = FALSE)
+
+
+head(d)
+d
+library(tidyverse)
+ny <- d %>% select(Lake, Fraction, Rel.rate.DOC)
+ny
+nyt<-d[(d$Fraction=="LMW"),]
+res.aov <- aov(Rel.rate.DOC ~ Lake, data = nyt)
+# Summary of the analysis
+summary(res.aov)
+TukeyHSD(res.aov)
+nyt
+t.test(y1,y2)
+
+t.test(nytt$Rel.rate.DOC ~ nytt$Lake)
+head(nytt)
+
+#ORDERING the factor variables
+d$Lake <- factor(d$Lake,
+                 levels = c("Inlet","Hypolimnion", "Outlet"),ordered = TRUE)
+d$Fraction <- factor(d$Fraction,
+                     levels = c("LMW","HMW", "Total"),ordered = TRUE)
+
+
+
+
+write.table(DOC, "//niva-of5/osl-userdata$/CBG/Documents/CLIMER/Data/Biodegradation/DOCsum", sep="\t")
+par(mfrow=c(1,2)) 
+head(LMW)
+
+#Is there a correlation?
+outlet<-outlet[(outlet$sUVa> 1),]
+head(inlet)
+plot(d$Rate.DOC.ave~d$sUVa)
+plot(d$Rate.DOC.ave~d$sUVa)
+fit <- lm(d$Rate.DOC.ave~ d$sUVa)
+fit <- lm(outlet$Rate.DOC.ave~ outlet$HI)
+#fit <- lm(LMW$Rate.DOC.ave~ LMW$sVISa+LMW$SAR+LMW$a)
+abline(fit, col="red")
+summary(fit)
+
+
+#repeated from summary section above
+dx <- summarySE(d, measurevar="Hg", groupvar=c("Month", "Lake", "Fraction"))
+head(dx)
+
+#ORDERING the factor variables
+dx$Lake <- factor(dx$Lake,
+                  levels = c("Inlet","Hypolimnion", "Outlet"),ordered = TRUE)
+dx$Fraction <- factor(dx$Fraction,
+                      levels = c("LMW","HMW", "Total"),ordered = TRUE)
+dx$Month <- factor(dx$Month,
+                   levels = c("September_16", "January_17", "April_17", "June_17", "September_17", 
+                              "May_18", "September_18", "October_18"),ordered = TRUE)
+head(dx)
+#4) plot biodeg data seasonal w error bars and lines
+pd <- position_dodge(0.1)
+ggplot(dx, aes(x=factor(Month), y=Hg, color=factor(Fraction))) + 
+  geom_line(aes(group=Fraction), position=pd) +
+  geom_point(position=pd)+
+  scale_color_manual(values=c("blue", "orange", "red"))+
+  facet_grid(. ~ factor(Lake))+
+  theme(axis.text.y = element_text(size= 14),
+        axis.title.x = element_text(size = 18, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 18, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 18),
+        axis.text.x = element_text(angle=90, hjust=1, vjust=0.5, size = 16),
+        plot.title=element_text(size=20, face="bold"))
+scale_x_discrete(breaks=1:26,
+                 labels=c("September_16", "October_16", "November_16", "December_16",
+                          "January_17", "February_17", "March_17", "April_17", "May_17",
+                          "June_17", "July_17", "August_17", "September_17", "October_17",
+                          "November_17", "December_17", "January_18", "February_18", "March_18", 
+                          "April_18", "May_18","June_18", "July_18", "August_18", 
+                          "September_18", "October_18" ))
+
+
+
+
+
+
+#For ? se effekt av seson p? LMW og HMW sesongvariasjon
+head(inl2)
+ggplot(ou2, aes(x=factor(Month), y=Rate.DOC,  fill=Fraction)) + 
+  geom_bar(stat="identity", position=position_dodge())+
+  geom_errorbar(aes(ymin=Rate.DOC-se, ymax=Rate.DOC+se),
+                width=.2,                    # Width of the error bars
+                position=position_dodge(.9))
+
+
+ggplot(depth, aes(x=factor(Fraction), y=Rate.DOC, group=factor(Fraction))) + 
+  geom_boxplot()+
+  facet_grid(. ~ factor(Month))+
+  labs(y="Rate of O2 decay",
+       x="DOM fraction")+
+  ggtitle("Depth")+
+  theme(axis.text.x = element_text(size = 16, face = "plain"),
+        axis.text.y = element_text(size= 14),
+        axis.title.x = element_text(size = 18, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 18, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 18),
+        plot.title = element_text(size=30, face="bold", margin=margin(0,0,0,20)))
+
+ggplot(lmw, aes(x=factor(Month), y=Rate.DOC, group=factor(Month), fill=Fraction) + 
+         geom_bar(stat="identity")+
+         geom_errorbar(aes(ymin=Rate.DOC-se, ymax=Rate.DOC+se),
+                       width=.2,                    # Width of the error bars
+                       position=position_dodge(.9))
+       
+       geom_boxplot()+
+         facet_grid(. ~ factor(Lake))+
+         labs(y="Rate of O2 decay",
+              x="DOM fraction")+
+         theme(axis.text.x = element_text(size = 16, face = "plain"),
+               axis.text.y = element_text(size= 14),
+               axis.title.x = element_text(size = 18, margin=margin(20,0,0,0)),
+               axis.title.y = element_text(size = 18, margin=margin(0,20,0,0)),
+               strip.text.x = element_text(size = 18))
+  

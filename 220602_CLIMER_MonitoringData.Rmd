@@ -1,0 +1,324 @@
+---
+title: "220602_CLIMER_monitoringData"
+author: "CBG"
+date: "2 6 2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+The following file can not be found. 
+```{r}
+#setwd("//niva-of5/osl-userdata$/CBG/Documents/R/Projects/CLIMER TFF/CLIMER TFF")
+dx <- read.table("TOC_Hg_Abs_Inlet__Hyp_outlet_2016_2019_2.txt", sep = "\t", header = TRUE)
+head(dx)
+```
+
+```{r}
+library(ggplot2)
+library(magrittr)
+library(dplyr)
+library(scales)
+library(lubridate)
+library(anytime) 
+```
+
+
+```{r}
+#FIND variability in inlet vs outlet TOC
+outlet <- subset(dx,  Station =="Outlet")
+inlet <- subset(dx,  Station =="Inlet")
+dx<-dx[!(dx$Station=="Hypolimnion"),]
+
+library(pastecs)
+stat.desc(outlet)
+
+dx$Date <- as.Date(dx$Date,format = "%d.%m.%Y")
+
+dx$Year=format(as.Date(dx$Date, format="%d.%m.%Y"),"%Y")
+dx$month_day=format(as.Date(dx$Date, format="%d.%m"),"%d.%m")
+dx$month_day <- as.Date(dx$month_day,format = "%d.%m")
+
+
+#dx$year <- tidyr::separate(dx, Date, c('year'), sep = "-",remove = FALSE)
+#dx$year <- transform(dx,  year = format(Date, "%Y"))
+
+#date = format(Date, "%d"), month = format(Date, "%m"),
+
+head(dx)
+str(dx)
+
+dx$labile_m = (dx$X285nm/dx$TOC_m)*100
+dx$labile_s = (dx$X285nm_s/dx$DOC_s)*100
+
+dx$sUVa_m = (dx$X254nm/dx$TOC_m)*100
+dx$sUVa_s = (dx$X254nm_s/dx$DOC_s)*100
+
+dx$sVISa_m = (dx$X400nm/dx$TOC_m)*1000
+dx$sVISa_s = (dx$X400nm_s/dx$DOC_s)*1000
+
+dx$SAR_m = (dx$X254nm/dx$X400nm)*1000
+#dx$SAR_s = (dx$X400nm_s/dx$DOC_s)*1000
+
+dx$E2_E3_m = (dx$X254nm/dx$X365nm)
+dx$E2_E3_s = (dx$X254nm_s/dx$X365nm_s)
+
+dx$THGTOC_m = dx$THg_m/dx$TOC_m
+dx$THGDOC_s = dx$THg_s/dx$DOC_s
+
+dx$MeHGTOC_m = dx$MeHg_m/dx$TOC_m
+dx$MeHGDOC_s = dx$MeHg_s/dx$DOC_s
+
+dx$MeHg_rel_m = (dx$MeHg_m/dx$THg_m)*100
+summary(dx$MeHg_rel_m)
+head(dx)
+```
+
+```{r}
+#PLOTTING with time on x-axis and year-facets
+class(dx$Date)
+class(dx$month_day)
+
+ggplot(dx)+
+  geom_point(aes(x=month_day, y=TOC_m, colour=Station), shape=16, size=5)+
+  #geom_line(aes(x=month_day, y=TOC_m, colour=Station))+
+  geom_smooth(aes(x=month_day, y=TOC_m, colour=Station), shape=16, size=1)+
+  geom_point(aes(x=month_day, y=DOC_s, colour=Station), shape=17, size=5)+
+  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
+  theme_bw()+
+  facet_grid(.~ Year)
+  
+ggplot(dx)+
+  geom_point(aes(x=month_day, y=THg_m, colour=Station), shape=16, size=5)+
+  geom_smooth(aes(x=month_day, y=THg_m, colour=Station), shape=16, size=2)+
+  geom_point(aes(x=month_day, y=THg_s, colour=Station), shape=17, size=5)+
+  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
+  theme_bw()+
+  facet_grid(.~ Year)  
+
+
+ggplot(dx)+
+  geom_point(aes(x=month_day, y=sUVa_m, colour=Station), shape=16, size=5)+
+  geom_smooth(aes(x=month_day, y=sUVa_m, colour=Station), shape=16, size=2)+
+  #geom_point(aes(x=month_day, y=sUVa_s, colour=Station), shape=17, size=5)+
+  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
+  theme_bw()+
+  facet_grid(.~ Year)  
+
+
+ggplot(dx)+
+  geom_point(aes(x=month_day, y=THGTOC_m, colour=Station), shape=16, size=5)+
+  geom_smooth(aes(x=month_day, y=THGTOC_m, colour=Station), shape=16, size=2)+
+  geom_point(aes(x=month_day, y=THGDOC_s, colour=Station), shape=17, size=5)+
+  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
+  theme_bw()+
+  facet_grid(.~ Year)  
+
+
+
+
+
+, scales="free_x")
+  ylim(4, 7)
+      
+  facet_grid(.~year, scales="free_x")
+scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
+ 
+  
+  
+  ggplot(dx)+
+  geom_point(aes(x=Date, y=TOC_m, colour=Station), shape=16, size=5)+
+  geom_smooth(aes(x=Date, y=TOC_m, colour=Station), shape=16, size=2)+
+      scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
+  facet_grid(.~year(dx$Date), scales="free_x")+
+  theme_bw()
+  ylim(4, 7)
+
+scale_y_continuous(limit=c(3.2, 4))
+geom_point(aes(x=Date, y=labile_s, colour=Station), shape=17, size=5)+
+head(dx)
+```
+
+
+
+  
+#geom_point(aes(x=Date, y=sUVa_s, colour=Station), size=5, shape=17)+
+geom_smooth(aes(x=Date, y=sUVa_s, colour=Station), size=2)
+#Correlation plots
+library("ggpubr")
+head(dx)
+ggscatter(dx, x = "sUVa_m", y = "sVISa_m", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab ="Molecular SIze (sUVa)" , ylab ="THg:DOC (ng/mg)")
+  facet_grid(.~Station)
+    facet_grid(.~year(dx$Date), scales="free_x")
+    
+head(dx)
+    #IMPORTANT!!! Correlation plot for Hg and DOM 
+    ggplot(inlet, aes(labile_m, THGTOC_m))+
+      geom_point(size=6)+
+      geom_smooth(method = "lm", se = FALSE, colour="black")
+      facet_grid(. ~ factor(Station), scales="free")
+      xlim(4, 6)
+      
+      inlet <- subset(dx, Station == "Inlet")
+      outlet <- subset(dx, Station == "Outlet")
+    head(dx)
+      #Correlation analysis
+      library(dplyr)
+      b <- select(dx, TOC_m, THg_m, MeHg_m, sUVa_m, sVISa_m, SAR_m, E2_E3_m, labile_m, THGTOC_m, MeHGTOC_m)
+      library(Hmisc)
+      rcorr(as.matrix(b), type="pearson")
+      class(d)
+      library("PerformanceAnalytics")
+      chart.Correlation(b, histogram=TRUE, pch=19)
+      head(d)
+      
+      
+      #MAKKING THE CORRELATION ASSESSMENT
+      library(tidyverse)
+      library(ggpubr)
+      theme_set(theme_pubr())
+      ggplot(outlet, aes(x = SAR_m, y = THGTOC_m)) +
+        geom_point() +
+        stat_smooth()+
+        stat_smooth(method = lm)
+      
+model <- lm(THGTOC_m ~ sVISa_m, data = dx)
+model  
+summary(model)
+
+
+
+#STATISTICAL TESTING
+res.aov <- aov(THGTOC_m ~ Station, data = dx)
+# Summary of the analysis
+summary(res.aov)
+TukeyHSD(res.aov)
+
+
+
+
+
+
+
+#Correlation with SENSOR LAKE DATA
+dy <- read.table("Langtjern_weather.txt", sep = "\t", header = TRUE) #load data
+dy$Date <- as.Date(dy$SampleDate,format = "%d.%m.%Y") #convert to date column
+df <- dy[ -c(1:5) ] #removed uneccesary columns
+head(df)
+
+#to make monthly summaries
+dff = df %>%
+  mutate(month = format(Date, "%m"), year = format(Date, "%Y")) %>%
+  group_by(month, year) %>%
+  summarise(sun = mean(Straaling),
+            airT = mean(AirTemp),
+            Prec = mean(Precip),
+            Hum = mean(Humidity))
+
+plot(dff)
+head(dff)
+#Aggreger per dag
+library(dplyr)
+(out <- df %>%
+    group_by(Date) %>%
+    summarize(Sun=sum(Straaling), 
+              Precip=sum(Precip),
+              Precip_ave=mean(Precip),
+              AirTemp=mean(AirTemp),
+              Humidity = mean(Humidity)))
+
+head(df)
+
+#PLOTTING with time on x-axis and year-facets
+ggplot(out)+
+  geom_point(aes(x=Date, y=Precip), shape=16, size=5)
+  geom_smooth(aes(x=Date, y=Precip), shape=16, size=2)+
+  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
+  facet_grid(.~year(dx$Date), scales="free_x")+
+  theme_bw()
+ylim(2.5, 6)
+scale_y_continuous(limit=c(3, 4))
+geom_point(aes(x=Date, y=labile_s, colour=Station), shape=17, size=5)+
+  head(dx)
+
+
+
+
+
+
+ou <- head(out)
+dfff <- na.omit(dff)
+head(dfff)
+ou = dfff
+nrow(sun)
+head(ou)
+#Make indivudual datafiles as ts with correct frequency
+sun <- ts(ou$sun, frequency=12, start=2016, end=2019)
+pre <- ts(ou$Prec, frequency=12, start=2016, end=2019)
+airT <- ts(ou$airT, frequency=12, start=2016, end=2019)
+Humi <- ts(ou$Hum, frequency=12, start=2016, end=2019)
+
+plot(sunny)
+sunny <- decompose(sun)
+precip <- decompose(pre)
+AirTemp <- decompose(airT)
+Humidity <- decompose(Humi)
+plot(Humidity)
+plot(AirTemp)
+plot(precip)
+plot(sunny)
+ts.plot(pre)
+
+#then YOU CAN SUBTRACT E.G. THE SEAOSNAL COMPONENT FROM THE DATA
+birthsSeasonAdj <- sun - sunny$seasonal- sunny$random
+plot.ts(birthsSeasonAdj)
+
+#Make correspodning individual ts with correct frequency
+#here we have inlet and outlet. can look at these individually and at the difference bwteen the two
+newdata <- subset(dx,  Station =="Outlet")
+sUVa <- na.omit(newdata$sUVa_m)
+sUVaTS <- ts(sUVa, frequency=365, start=2016, end=2019)
+
+decomsUVa <- decompose(sUVaTS)
+plot(decomsUVa)
+
+suva <- sUVaTS - decomsUVa$seasonal - decomsUVa$random
+plot.ts(suva)
+plot(suva~birthsSeasonAdj)
+
+abline(lm(suva~birthsSeasonAdj))
+
+ab <- lm(suva~birthsSeasonAdj)
+summary(ab)
+
+#What about doing monthly aggregates???
+
+
+
+
+
+
+
+
+#PLoT værdata med eventuelt langtjern data
+ggplot()+
+  geom_smooth(dx, mapping=aes(x=Date, y=Precip), shape=16, size=2)+
+  geom_point(dx, mapping=aes(x=Date, y=TOC_m, colour=Station), shape=16, size=3)
+  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
+  scale_y_continuous(name = "Radiation", 
+                     sec.axis = sec_axis(~.*10, name = "TOC"))
+  facet_grid(.~year, scales="free_x")+
+  theme_bw()
+  
+
+linearMod <- lm(_m ~ TOC_m, data=dx)
+print(linearMod)
+summary(linearMod)
