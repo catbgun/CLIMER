@@ -237,22 +237,31 @@ b1 <- read.table("Copy of Climer_Biodeg_3.txt", sep = "\t", header = TRUE, fill=
 b2 <- subset(b1, Lake!="Hypolimnion")
 b3<-subset(b2,Fraction!="Bulk")
 
+
+
 #Rate.DOC.ave
 ggplot(b2, aes(x=Fraction, y= Rate.DOC.ave, fill=Fraction))+
   geom_boxplot()+
   facet_grid(.~Lake)+
   scale_y_reverse() 
-  scale_y_manuel(limits=rev)
+
+
+ggplot(LM, aes(x=Fraction, y= Rate.DOC.ave, fill=Fraction))+
+  geom_boxplot()+
+  facet_grid(.~Lake)+
+  scale_y_reverse() 
+ 
 
 ggplot(b3, aes(x=Fraction, y= Rel.rate.DOC))+
   geom_boxplot()+
   facet_grid(.~Lake)
 
-ggplot(b3, aes(x=Lake, y= Rel.rate.DOC))+
+ggplot(b3, aes(x=Lake, y= Rate.DOC.ave, fill=Lake))+
   geom_boxplot()+
-  facet_grid(.~Fraction)
+  facet_grid(.~Fraction)+
+  scale_y_reverse() 
 
-ggplot(b2, aes(x=Lake, y= Rate.DOC.ave))+
+ggplot(b2, aes(x=Lake, y= Rate.DOC.ave, fill=Lake))+
   geom_boxplot()+
   facet_grid(.~Fraction)
 
@@ -279,11 +288,16 @@ lm_eqn <- function(df){
 ```
 
 ```{r Correlation biodeg data}
+library(ggpubr)
 
-ggplot(b2, aes(Rate.DOC.ave, Hg.DOC))+
-  geom_point(size=6)+
+LM <- subset(b3, Fraction=="LMW")
+HM <- subset(b3, Fraction=="HMW")
+
+ggplot(b3, aes(sUVa, Rate.DOC.ave))+
+  geom_point(size=6, aes(shape=Fraction))+
   geom_smooth(method = "lm", se = FALSE, colour="black")+
-  facet_grid(Lake ~ Fraction, scales="free")
+  stat_regline_equation(label.x=0.35, label.y=-0.012) +
+  stat_cor(aes(label=..rr.label..), label.x=0.35, label.y=-0.013)+
   theme(axis.text.y = element_text(size= 22),
         axis.title.x = element_text(size = 24, margin=margin(20,0,0,0)),
         axis.title.y = element_text(size = 24, margin=margin(0,20,0,0)),
@@ -291,9 +305,12 @@ ggplot(b2, aes(Rate.DOC.ave, Hg.DOC))+
         axis.text.x = element_text(angle=0, hjust=0.5, vjust=0, size = 24),
         plot.title=element_text(size=30, face="bold"),
         legend.text=element_text(size=26),
-        legend.title = element_blank())
-  geom_text(x = 25, y = 300, label = lm_eqn(df), parse = TRUE)
+        legend.title = element_blank())+
+    facet_grid(.~Lake)
 
+
+  
+  #  facet_grid(Lake ~ Fraction, scales="free")
 labs(title = "DOM Size and Aromaticity", x = "sUVa (Abs254:DOC*100)", y = "Rate of DOC decay:DOC (/h)")
 ylim(0, -0.007)+
   scale_colour_manual(values=c("#F8766D", "#7CAE00", "#00BFC4"))+
