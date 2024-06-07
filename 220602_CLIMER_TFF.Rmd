@@ -30,26 +30,108 @@ d1$Date <- as.Date(d1$Date,format = "%d.%m.%Y")
 d1$Month <- month(d1$Date, label=TRUE) #Not working, find other way from other projects
 d1$year <- year(d1$Date) #Not working, find other way from other projects
 
+dx <- subset(d1, Position!="Hypolimnion")
 
-d1$Position <- factor(d1$Position,
-                      levels = c("Inlet", "Hypo", "Outlet"),ordered = TRUE)
-d1$Size <- factor(d1$Size,
+unique(dx$Position)
+dx$Position <- factor(dx$Position,
+                      levels = c("Inlet", "Outlet"),ordered = TRUE)
+dx$Size <- factor(dx$Size,
                   levels = c("LMW", "HMW"),ordered = TRUE)
-d1$Date <- factor(d1$Date,
+dx$Date <- factor(dx$Date,
                   levels = c("15.09.2016", "25.01.2017", "01.04.2017", "06.06.2017", "22.09.2017", 
                              "29.05.2018", "20.09.2018","17.10.2018", "21.05.2019", "07.06.2019"),ordered = TRUE)
 
 ```
+Summary 
+```{r}
+
+#dz <- na.omit(dx)
+dx %>% 
+  group_by(Size) %>% 
+    summarize(
+    avg_TOC = mean(DOC_UiO),
+    sd_TOC = sd(DOC_UiO),
+    avg_THg = mean(na.omit(THg)),
+    sd_THg = sd(na.omit(THg)),
+    avg_THgDOC = mean(na.omit(THg_DOC)),
+    sd_THgDOC = sd(na.omit(THg_DOC)),
+    avg_sUVa = mean(sUVa),
+    sd_sUVa = sd(sUVa),
+    avg_pH = mean(pH),
+    sd_pH = sd(pH)
+)
+
+
+```
+
+Statistics
+https://www.datanovia.com/en/blog/how-to-perform-t-test-for-multiple-groups-in-r/
+t test for two groups (ANOVA from additional groups)
+should use unparied/independent t-test
+two-sample test since comparing two samples/groups
+two-tailed test for asking if there is a difference or not
+```{r}
+# Load required R packages
+library(tidyverse)
+library(rstatix)
+library(ggpubr)
+#STATISTICAL TESTING
+
+# Pairwise comparisons
+pwc <- dx %>%
+  pairwise_t_test(THg_DOC ~ Size, paired=FALSE, alternative= "two.sided")
+pwc
+
+pwc <- dx %>%
+  pairwise_t_test(sUVa ~ Size, paired=FALSE, alternative= "two.sided")
+pwc
+
+
+
+#t.test(LMW~HMW, mu=0, alt="two.sided", conf=0.95, var.eq=F, paired=F)
+#res.aov <- aov(dx$THGTOC_m ~ dx$Station, data = dx)
+# Summary of the analysis
+#summary(res.aov)
+#TukeyHSD(res.aov)
+
+```
+
 
 #1) Boxplot
 - look for differences between LMW and HMW optical properties
 
 ```{r Boxplot}
-ggplot(d1, aes(x=Size, y= DOC_UiO))+
-  geom_boxplot()+
+ggplot(dx, aes(x=Size, y= DOC_UiO))+
+  geom_boxplot()
   facet_grid(.~Position)
 
 ```
+
+#1.1 Correlation scatter plot
+```{r}
+#d <- subset(d, Lake == "Inlet"| Lake =="Outlet")
+#d <- subset(d, Fraction == "LMW"| Fraction =="HMW")
+head(dx)
+#IMPORTANT!!! Correlation plot for biodeg and parameters
+ggplot(dx, aes(sUVa, THg_DOC))+
+  geom_point(aes(colour=interaction(factor(Size))), size=6)+
+  geom_smooth(method = "lm", se = FALSE, colour="black")+
+  theme(axis.text.y = element_text(size= 22),
+        axis.title.x = element_text(size = 24, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 24, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 32),
+        axis.text.x = element_text(angle=0, hjust=0.5, vjust=0, size = 24),
+        plot.title=element_text(size=30, face="bold"),
+        legend.text=element_text(size=26),
+        legend.title = element_blank())+
+  facet_grid(. ~ factor(Position))
+
+labs(title = "DOM Size and Aromaticity", x = "sUVa (Abs254:DOC*100)", y = "Rate of DOC decay:DOC (/h)")
+ylim(0, -0.007)+
+  scale_colour_manual(values=c("#F8766D", "#7CAE00", "#00BFC4"))+
+  xlim(0, 8)
+```
+
 #2) Barplplot
 - look for seasonal differences in the distribution between LMW and HMW
 ```{r}
@@ -59,8 +141,6 @@ ggplot(d1, aes(x=Date, y=sUVa, fill=Months))+
   facet_grid(Size~.)
 
 ```
-
-
 
 #2) Barplot: seasonal, relative. Muligens det samme som i punkt 3...
 - make summrary before plotting
@@ -125,10 +205,8 @@ ggplot(ds, aes(x=factor(Position), y=Labile)) +
 
 ```
 
-
 #4) #4) Correlation plots 
 #Correlation plots, LMW/HMW, and INlet/Outlet
-
 ```{r}
 d <- subset(d, Lake == "Inlet"| Lake =="Outlet")
 d <- subset(d, Fraction == "LMW"| Fraction =="HMW")
@@ -152,6 +230,87 @@ ylim(0, -0.007)+
   xlim(0, 8)
 ```
 
+## Biodegradation data
+```{r}
+b1 <- read.table("Copy of Climer_Biodeg_3.txt", sep = "\t", header = TRUE, fill=TRUE)
 
+b2 <- subset(b1, Lake!="Hypolimnion")
+b3<-subset(b2,Fraction!="Bulk")
 
+#Rate.DOC.ave
+ggplot(b2, aes(x=Fraction, y= Rate.DOC.ave, fill=Fraction))+
+  geom_boxplot()+
+  facet_grid(.~Lake)+
+  scale_y_reverse() 
+  scale_y_manuel(limits=rev)
+
+ggplot(b3, aes(x=Fraction, y= Rel.rate.DOC))+
+  geom_boxplot()+
+  facet_grid(.~Lake)
+
+ggplot(b3, aes(x=Lake, y= Rel.rate.DOC))+
+  geom_boxplot()+
+  facet_grid(.~Fraction)
+
+ggplot(b2, aes(x=Lake, y= Rate.DOC.ave))+
+  geom_boxplot()+
+  facet_grid(.~Fraction)
+
+```
+
+## Correlation plots with biodeg data
+
+#Correlation plots, LMW/HMW, and INlet/Outlet
+
+```{r}
+# GET EQUATION AND R-SQUARED AS STRING
+# SOURCE: https://groups.google.com/forum/#!topic/ggplot2/1TgH-kG5XMA
+
+lm_eqn <- function(df){
+    m <- lm(y ~ x, df);
+    eq <- substitute(italic(y) == a + b %.% italic(x)*","~~italic(r)^2~"="~r2, 
+         list(a = format(unname(coef(m)[1]), digits = 2),
+              b = format(unname(coef(m)[2]), digits = 2),
+             r2 = format(summary(m)$r.squared, digits = 3)))
+    as.character(as.expression(eq));
+}
+
+#p1 <- p + geom_text(x = 25, y = 300, label = lm_eqn(df), parse = TRUE)
+```
+
+```{r Correlation biodeg data}
+
+ggplot(b2, aes(Rate.DOC.ave, Hg.DOC))+
+  geom_point(size=6)+
+  geom_smooth(method = "lm", se = FALSE, colour="black")+
+  facet_grid(Lake ~ Fraction, scales="free")
+  theme(axis.text.y = element_text(size= 22),
+        axis.title.x = element_text(size = 24, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 24, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 32),
+        axis.text.x = element_text(angle=0, hjust=0.5, vjust=0, size = 24),
+        plot.title=element_text(size=30, face="bold"),
+        legend.text=element_text(size=26),
+        legend.title = element_blank())
+  geom_text(x = 25, y = 300, label = lm_eqn(df), parse = TRUE)
+
+labs(title = "DOM Size and Aromaticity", x = "sUVa (Abs254:DOC*100)", y = "Rate of DOC decay:DOC (/h)")
+ylim(0, -0.007)+
+  scale_colour_manual(values=c("#F8766D", "#7CAE00", "#00BFC4"))+
+  xlim(0, 8)
+```
+
+# Biodeg correlation plot
+```{r}
+class(b2$sUVa)
+library(dplyr)
+b2x <- na.omit(b2$Rate.DOC.ave)
+
+correlation_by_group <- b2x %>%
+  group_by(Lake, Fraction) %>%
+  summarise(correlation = cor(Rate.DOC.ave, sUVa))
+
+# Print the result
+print(correlation_by_group)
+```
 

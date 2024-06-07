@@ -15,7 +15,10 @@ knitr::opts_chunk$set(echo = TRUE)
 The following file can not be found. 
 ```{r}
 #setwd("//niva-of5/osl-userdata$/CBG/Documents/R/Projects/CLIMER TFF/CLIMER TFF")
-dx <- read.table("TOC_Hg_Abs_Inlet__Hyp_outlet_2016_2019_2.txt", sep = "\t", header = TRUE)
+#dx <- read.table("TOC_Hg_Abs_Inlet__Hyp_outlet_2016_2019_2.txt", sep = "\t", header = TRUE)
+#found errors in the abs data at 365 nm. May also be errors at other wavelengths, for the inlet. Outlet seems ok and 254 nm ok
+dx <- read.table("TOC_Hg_Abs_Inlet__Hyp_outlet_2016_2019_3.txt", sep = "\t", header = TRUE)
+
 head(dx)
 ```
 
@@ -53,16 +56,16 @@ dx$month_day <- as.Date(dx$month_day,format = "%d.%m")
 head(dx)
 str(dx)
 
-dx$labile_m = (dx$X285nm/dx$TOC_m)*100
-dx$labile_s = (dx$X285nm_s/dx$DOC_s)*100
+#dx$labile_m = (dx$X285nm/dx$TOC_m)*100
+#dx$labile_s = (dx$X285nm_s/dx$DOC_s)*100
 
 dx$sUVa_m = (dx$X254nm/dx$TOC_m)*100
 dx$sUVa_s = (dx$X254nm_s/dx$DOC_s)*100
 
-dx$sVISa_m = (dx$X400nm/dx$TOC_m)*1000
-dx$sVISa_s = (dx$X400nm_s/dx$DOC_s)*1000
+#dx$sVISa_m = (dx$X400nm/dx$TOC_m)*1000
+#dx$sVISa_s = (dx$X400nm_s/dx$DOC_s)*1000
 
-dx$SAR_m = (dx$X254nm/dx$X400nm)*1000
+#dx$SAR_m = (dx$X254nm/dx$X400nm)*1000
 #dx$SAR_s = (dx$X400nm_s/dx$DOC_s)*1000
 
 dx$E2_E3_m = (dx$X254nm/dx$X365nm)
@@ -84,44 +87,159 @@ head(dx)
 class(dx$Date)
 class(dx$month_day)
 
+#TOC
 ggplot(dx)+
-  geom_point(aes(x=month_day, y=TOC_m, colour=Station), shape=16, size=5)+
+  geom_point(aes(x=month_day, y=TOC_m, shape=Station, colour=Year), size=5)+
   #geom_line(aes(x=month_day, y=TOC_m, colour=Station))+
   geom_smooth(aes(x=month_day, y=TOC_m, colour=Station), shape=16, size=1)+
-  geom_point(aes(x=month_day, y=DOC_s, colour=Station), shape=17, size=5)+
+  #geom_point(aes(x=month_day, y=DOC_s, colour=Station), shape=17, size=5)+
   scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
   theme_bw()+
+  labs(y = "TOC (mg/L)")+
+   theme(
+    legend.text = element_text(size = 14),
+    legend.title = element_text(size = 14),
+    axis.text.x = element_text(size=12, angle = 45, hjust = 1),
+    axis.text.y = element_text(size=12),
+    strip.text = element_text(size = 12),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0))
+  )
   facet_grid(.~ Year)
   
 ggplot(dx)+
-  geom_point(aes(x=month_day, y=THg_m, colour=Station), shape=16, size=5)+
-  geom_smooth(aes(x=month_day, y=THg_m, colour=Station), shape=16, size=2)+
-  geom_point(aes(x=month_day, y=THg_s, colour=Station), shape=17, size=5)+
+  geom_point(aes(x=month_day, y=E2_E3_m, colour=Station), shape=16, size=5)+
+  #geom_line(aes(x=month_day, y=TOC_m, colour=Station))+
+  geom_smooth(aes(x=month_day, y=E2_E3_m, colour=Station), shape=16, size=1)+
+  #geom_point(aes(x=month_day, y=DOC_s, colour=Station), shape=17, size=5)+
   scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
-  theme_bw()+
-  facet_grid(.~ Year)  
-
-
-ggplot(dx)+
-  geom_point(aes(x=month_day, y=sUVa_m, colour=Station), shape=16, size=5)+
-  geom_smooth(aes(x=month_day, y=sUVa_m, colour=Station), shape=16, size=2)+
-  #geom_point(aes(x=month_day, y=sUVa_s, colour=Station), shape=17, size=5)+
-  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
-  theme_bw()+
-  facet_grid(.~ Year)  
-
-
+  theme_bw()
+  labs(y = "TOC (mg/L)")+
+   theme(
+    legend.text = element_text(size = 14),
+    legend.title = element_text(size = 14),
+    axis.text.x = element_text(size=12, angle = 45, hjust = 1),
+    axis.text.y = element_text(size=12),
+    strip.text = element_text(size = 12),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0))
+  )+
+  facet_grid(.~ Year)
+  
+  
+#THg:TOC
 ggplot(dx)+
   geom_point(aes(x=month_day, y=THGTOC_m, colour=Station), shape=16, size=5)+
   geom_smooth(aes(x=month_day, y=THGTOC_m, colour=Station), shape=16, size=2)+
   geom_point(aes(x=month_day, y=THGDOC_s, colour=Station), shape=17, size=5)+
   scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
   theme_bw()+
+  labs(y = "THg:TOC (ng/mg)")+
+   theme(
+    legend.text = element_text(size = 14),
+    legend.title = element_text(size = 14),
+    axis.text.x = element_text(size=12, angle = 45, hjust = 1),
+    axis.text.y = element_text(size=12),
+    strip.text = element_text(size = 12),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0))
+  )+
+  facet_grid(.~ Year)  
+
+#sUVa
+ggplot(dx)+
+  geom_point(aes(x=month_day, y=sUVa_m, colour=Station), shape=16, size=5)+
+  geom_smooth(aes(x=month_day, y=sUVa_m, colour=Station), shape=16, size=2)+
+  #geom_point(aes(x=month_day, y=sUVa_s, colour=Station), shape=17, size=5)+
+  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
+  theme_bw()+
+    labs(y = "sUVa-254nm (L/mg C m)")+
+   theme(
+    legend.text = element_text(size = 14),
+    legend.title = element_text(size = 14),
+    axis.text.x = element_text(size=12, angle = 45, hjust = 1),
+    axis.text.y = element_text(size=12),
+    strip.text = element_text(size = 12),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0))
+  )+
+  facet_grid(.~ Year)  
+
+#Hg
+ggplot(dx)+
+  geom_point(aes(x=month_day, y=THg_m, colour=Station), shape=16, size=5)+
+  geom_smooth(aes(x=month_day, y=THg_m, colour=Station), shape=16, size=2)+
+  geom_point(aes(x=month_day, y=THg_s, colour=Station), shape=17, size=5)+
+  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
+  theme_bw()+
+     labs(y = "THg (ng/L)")+
+   theme(
+    legend.text = element_text(size = 14),
+    legend.title = element_text(size = 14),
+    axis.text.x = element_text(size=12, angle = 45, hjust = 1),
+    axis.text.y = element_text(size=12),
+    strip.text = element_text(size = 12),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0))
+  )+
   facet_grid(.~ Year)  
 
 
+#size
+ggplot(dx)+
+  geom_point(aes(x=Date, y=TOC_m, colour=Station), shape=16, size=5)+
+  geom_smooth(aes(x=Date, y=TOC_m, colour=Station), shape=16, size=2)+
+  #geom_point(aes(x=month_day, y=E2_E3_s, colour=Station), shape=17, size=5)+
+  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
+  theme_bw()+
+     labs(y = "E2_E3")+
+   theme(
+    legend.text = element_text(size = 14),
+    legend.title = element_text(size = 14),
+    axis.text.x = element_text(size=12, angle = 45, hjust = 1),
+    axis.text.y = element_text(size=12),
+    strip.text = element_text(size = 12),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0))
+  )
+  facet_grid(.~ Year)  
 
+ggplot(dx)+
+  geom_point(aes(x=month_day, y=E2_E3_m, colour=Station), shape=16, size=5)+
+  geom_smooth(aes(x=month_day, y=E2_E3_m, colour=Station), shape=16, size=2)+
+  #geom_point(aes(x=month_day, y=E2_E3_s, colour=Station), shape=17, size=5)+
+  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
+  theme_bw()+
+     labs(y = "E2_E3")+
+   theme(
+    legend.text = element_text(size = 14),
+    legend.title = element_text(size = 14),
+    axis.text.x = element_text(size=12, angle = 45, hjust = 1),
+    axis.text.y = element_text(size=12),
+    strip.text = element_text(size = 12),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0))
+  )+
+  facet_grid(.~ Year)  
 
+ggplot(dx)+
+  geom_point(aes(x=month_day, y=SAR_m, colour=Station), shape=16, size=5)+
+  geom_smooth(aes(x=month_day, y=SAR_m, colour=Station), shape=16, size=2)+
+  #geom_point(aes(x=month_day, y=E2_E3_s, colour=Station), shape=17, size=5)+
+  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
+  theme_bw()+
+  labs(y = "SAR")+
+   theme(
+    legend.text = element_text(size = 14),
+    legend.title = element_text(size = 14),
+    axis.text.x = element_text(size=12, angle = 45, hjust = 1),
+    axis.text.y = element_text(size=12),
+    strip.text = element_text(size = 12),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0))
+  )+
+  facet_grid(.~ Year) +
+  ylim(7000, 9000)
 
 , scales="free_x")
   ylim(4, 7)
@@ -129,8 +247,6 @@ ggplot(dx)+
   facet_grid(.~year, scales="free_x")
 scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
  
-  
-  
   ggplot(dx)+
   geom_point(aes(x=Date, y=TOC_m, colour=Station), shape=16, size=5)+
   geom_smooth(aes(x=Date, y=TOC_m, colour=Station), shape=16, size=2)+
@@ -144,7 +260,72 @@ geom_point(aes(x=Date, y=labile_s, colour=Station), shape=17, size=5)+
 head(dx)
 ```
 
+something trange with E2_E3, needs to investigae
+```{r}
+write.csv(dx, "climer checkin.csv")
+```
 
+```{r}
+# Pairwise comparisons
+pwc <- dx %>%
+  pairwise_t_test(E2_E3_m ~ Station, paired=FALSE, alternative= "two.sided")
+pwc
+
+pwc <- dx %>%
+  pairwise_t_test(sUVa ~ Size, paired=FALSE, alternative= "two.sided")
+pwc
+```
+
+
+Correlation plots
+```{r}
+library("ggpubr")
+head(dx)
+
+#dy<-dx[!(dx$Year=="2016"),]
+
+ggscatter(dx, x = "E2_E3_m", y = "THGTOC_m", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab ="" , ylab ="")+
+  facet_grid(.~Station)
+    facet_grid(.~year(dx$Date), scales="free_x")
+    
+head(dx)
+    #IMPORTANT!!! Correlation plot for Hg and DOM 
+    ggplot(dx, aes(labile_m, THGTOC_m))+
+      geom_point(size=6)+
+      geom_smooth(method = "lm", se = FALSE, colour="black")
+      facet_grid(. ~ factor(Station), scales="free")
+      xlim(4, 6)
+      
+      inlet <- subset(dx, Station == "Inlet")
+      outlet <- subset(dx, Station == "Outlet")
+    head(dx)
+      #Correlation analysis
+      library(dplyr)
+      b <- select(dx, TOC_m, THg_m, MeHg_m, sUVa_m, sVISa_m, SAR_m, E2_E3_m, labile_m, THGTOC_m, MeHGTOC_m)
+      library(Hmisc)
+      rcorr(as.matrix(b), type="pearson")
+      class(d)
+      library("PerformanceAnalytics")
+      chart.Correlation(b, histogram=TRUE, pch=19)
+      head(d)
+      
+      
+      #MAKKING THE CORRELATION ASSESSMENT
+      library(tidyverse)
+      library(ggpubr)
+      theme_set(theme_pubr())
+      ggplot(outlet, aes(x = SAR_m, y = THGTOC_m)) +
+        geom_point() +
+        stat_smooth()+
+        stat_smooth(method = lm)
+      
+model <- lm(THGTOC_m ~ sVISa_m, data = dx)
+model  
+summary(model)
+```
 
   
 #geom_point(aes(x=Date, y=sUVa_s, colour=Station), size=5, shape=17)+
