@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 *Installation of packages* 
 ```{r}
 #install.packages(c("ggplot2", "lubridate", "scales", "plyr"))
-Packages <- c("ggplot2", "lubridate", "scales", "plyr", "dplyr", "Rmisc")
+Packages <- c("ggplot2", "lubridate", "scales", "plyr", "dplyr", "Rmisc", "ggpubr")
 lapply(Packages, library, character.only = TRUE)
 ```
 
@@ -70,6 +70,120 @@ t test for two groups (ANOVA from additional groups)
 should use unparied/independent t-test
 two-sample test since comparing two samples/groups
 two-tailed test for asking if there is a difference or not
+```{r Normality testing}
+LMW <- subset(dx, Size == "LMW")
+HMW <- subset(dx, Size == "HMW")
+
+#Visual inspection: density plot and QQ plot
+ggdensity(LMW$THg_DOC, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggdensity(HMW$THg_DOC, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggqqplot(LMW$THg_DOC)
+ggqqplot(HMW$THg_DOC)
+
+#Normality test
+shapiro.test(LMW$THg_DOC)
+shapiro.test(HMW$THg_DOC)
+
+```
+
+```{r Normality testing}
+LMW <- subset(dx, Size == "LMW")
+HMW <- subset(dx, Size == "HMW")
+
+#Visual inspection: density plot and QQ plot
+ggdensity(LMW$sUVa, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggdensity(HMW$sUVa, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggqqplot(LMW$sUVa)
+ggqqplot(HMW$sUVa)
+
+#Normality test
+shapiro.test(LMW$sUVa)
+shapiro.test(HMW$sUVa)
+
+```
+
+```{r Normality testing}
+LMW <- subset(dx, Size == "LMW")
+HMW <- subset(dx, Size == "HMW")
+
+#Visual inspection: density plot and QQ plot
+ggdensity(LMW$E2_E3, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggdensity(HMW$E2_E3, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggqqplot(LMW$E2_E3)
+ggqqplot(HMW$E2_E3)
+
+#Normality test
+shapiro.test(LMW$E2_E3)
+shapiro.test(HMW$E2_E3)
+
+```
+
+```{r Normality testing}
+LMW <- subset(dx, Size == "LMW")
+HMW <- subset(dx, Size == "HMW")
+
+#Visual inspection: density plot and QQ plot
+ggdensity(LMW$THg_DOC, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggdensity(HMW$THg_DOC, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggqqplot(LMW$THg_DOC)
+ggqqplot(HMW$THg_DOC)
+
+#Normality test
+shapiro.test(LMW$THg_DOC)
+shapiro.test(HMW$THg_DOC)
+
+```
+
+
+Number of observations < 30 and most failing the normality test. 
+At .05 significance level, we conclude that the gas mileage data of manual and automatic transmissions in mtcar are nonidentical populations (if p-value < 0.05).
+http://www.sthda.com/english/wiki/unpaired-two-samples-wilcoxon-test-in-r
+```{r}
+#"two.sided" (default),
+wilcox.test(THg_DOC ~ Size, data=dx) 
+wilcox.test(sUVa ~ Size, data=dx)
+wilcox.test(E2_E3 ~ Size, data=dx)
+
+HMW <- subset(dx, Size =="HMW")
+
+#Visualise boxplot
+library("ggpubr")
+class(HMW$sUVa)
+ggboxplot(HMW, x = "Position", y = "E2_E3", 
+          color = "Position", palette = c("#00AFBB", "#E7B800"),
+          ylab = "Weight", xlab = "Groups")
+
+wilcox.test(E2_E3 ~ Position, data=HMW)
+
+```
+
+
+
+
 ```{r}
 # Load required R packages
 library(tidyverse)
@@ -77,16 +191,15 @@ library(rstatix)
 library(ggpubr)
 #STATISTICAL TESTING
 
+#Bulk er dessverre ikke med i datasettet her, kun i biodeg-dataene. Men vi kan henvise til verdier i appendiks. 
 # Pairwise comparisons
-pwc <- dx %>%
-  pairwise_t_test(THg_DOC ~ Size, paired=FALSE, alternative= "two.sided")
-pwc
 
-pwc <- dx %>%
-  pairwise_t_test(sUVa ~ Size, paired=FALSE, alternative= "two.sided")
-pwc
-
-
+length(LMW$THg_DOC)
+length(HMW$THg_DOC)
+length(LMW$sUVa)
+length(HMW$sUVa)
+length(LMW$E2_E3)
+length(HMW$E2_E3)
 
 #t.test(LMW~HMW, mu=0, alt="two.sided", conf=0.95, var.eq=F, paired=F)
 #res.aov <- aov(dx$THGTOC_m ~ dx$Station, data = dx)
@@ -96,10 +209,23 @@ pwc
 
 ```
 
+Correlation plots
+```{r}
+library("ggpubr")
+head(dx)
+
+#dy<-dx[!(dx$Year=="2016"),]
+
+ggscatter(dx, x = "sUVa", y = "THg" , 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab ="" , ylab ="")+
+  facet_grid(.~Size)
+```
+
 
 #1) Boxplot
 - look for differences between LMW and HMW optical properties
-
 ```{r Boxplot}
 ggplot(dx, aes(x=Size, y= DOC_UiO))+
   geom_boxplot()
@@ -113,7 +239,7 @@ ggplot(dx, aes(x=Size, y= DOC_UiO))+
 #d <- subset(d, Fraction == "LMW"| Fraction =="HMW")
 head(dx)
 #IMPORTANT!!! Correlation plot for biodeg and parameters
-ggplot(dx, aes(sUVa, THg_DOC))+
+ggplot(dx, aes(DOC_UiO, THg))+
   geom_point(aes(colour=interaction(factor(Size))), size=6)+
   geom_smooth(method = "lm", se = FALSE, colour="black")+
   theme(axis.text.y = element_text(size= 22),
@@ -237,14 +363,11 @@ b1 <- read.table("Copy of Climer_Biodeg_3.txt", sep = "\t", header = TRUE, fill=
 b2 <- subset(b1, Lake!="Hypolimnion")
 b3<-subset(b2,Fraction!="Bulk")
 
-
-
 #Rate.DOC.ave
 ggplot(b2, aes(x=Fraction, y= Rate.DOC.ave, fill=Fraction))+
   geom_boxplot()+
   facet_grid(.~Lake)+
   scale_y_reverse() 
-
 
 ggplot(LM, aes(x=Fraction, y= Rate.DOC.ave, fill=Fraction))+
   geom_boxplot()+
@@ -267,7 +390,72 @@ ggplot(b2, aes(x=Lake, y= Rate.DOC.ave, fill=Lake))+
 
 ```
 
+## Test for normality and significant difference
+```{r}
+LMWb <- subset(b3, Fraction == "LMW")
+HMWb <- subset(b3, Fraction == "HMW")
+
+#Visual inspection: density plot and QQ plot
+ggdensity(LMWb$Rate.DOC.ave, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggdensity(HMWb$Rate.DOC.ave, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggqqplot(LMW$Rate.DOC.ave)
+ggqqplot(HMW$Rate.DOC.ave)
+
+#Normality test
+shapiro.test(LMWb$Rate.DOC.ave)
+shapiro.test(HMWb$Rate.DOC.ave)
+length(LMWb$Rate.DOC.ave)
+length(HMWb$Rate.DOC.ave)
+```
+
+```{r Pairwise comparison}
+#"two.sided" (default),
+wilcox.test(Rate.DOC.ave ~ Fraction, data=b3) 
+wilcox.test(Rate_C_mg_ave ~ Fraction, data=b3) 
+wilcox.test(Rel.rate.DOC ~ Lake, data=LMWb) 
+#remove outlier
+wilcox.test(Rel.rate.DOC ~ Lake, data=LMWb_G) 
+wilcox.test(Rel.rate.DOC ~ Lake, data=HMWb) 
+
+LMWb_G <- subset(LMWb, Rel.rate.DOC > 25)
+
+HMW <- subset(dx, Size =="HMW")
+
+#Visualise boxplot
+library("ggpubr")
+
+ggboxplot(HMWb, x = "Lake", y = "Rel.rate.DOC", 
+          color = "Lake", palette = c("#00AFBB", "#E7B800"),
+          ylab = "Weight", xlab = "Groups")
+
+wilcox.test(E2_E3 ~ Position, data=HMW)
+
+```
 ## Correlation plots with biodeg data
+
+```{r}
+ggplot(b3, aes( E2_E3, Rate.DOC.ave))+
+  geom_point(size=6, aes(shape=Fraction, colour=Fraction))+
+  geom_smooth(method = "lm", se = FALSE, colour="black")+
+  stat_regline_equation(label.x=0.35, label.y=-0.007) +
+  stat_cor(aes(label=..rr.label..), label.x=0.35, label.y=-0.008)+
+  theme(axis.text.y = element_text(size= 22),
+        axis.title.x = element_text(size = 24, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 24, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 32),
+        axis.text.x = element_text(angle=0, hjust=0.5, vjust=0, size = 24),
+        plot.title=element_text(size=30, face="bold"),
+        legend.text=element_text(size=26),
+        legend.title = element_blank())+
+  stat_cor(method = "pearson", label.x = 0.30, label.y = -0.009)+
+    facet_grid(.~Lake)
+```
 
 #Correlation plots, LMW/HMW, and INlet/Outlet
 
@@ -287,17 +475,26 @@ lm_eqn <- function(df){
 #p1 <- p + geom_text(x = 25, y = 300, label = lm_eqn(df), parse = TRUE)
 ```
 
+For statistically comparing groups: http://www.sthda.com/english/articles/24-ggpubr-publication-ready-plots/76-add-p-values-and-significance-levels-to-ggplots/
+
 ```{r Correlation biodeg data}
 library(ggpubr)
+
+stat_compare_means(ref.group = "0.5", label = "p.signif",
+                     label.y = c(22, 29)) 
+
 
 LM <- subset(b3, Fraction=="LMW")
 HM <- subset(b3, Fraction=="HMW")
 
-ggplot(b3, aes(sUVa, Rate.DOC.ave))+
-  geom_point(size=6, aes(shape=Fraction))+
+Inl <- subset(b3, Lake=="Inlet")
+Outl <- subset(b3, Lake=="Outlet")
+
+ggplot(dx, aes(sUVa, THg_DOC))+
+  geom_point(size=6, aes(shape=Size, colour=Size))+
   geom_smooth(method = "lm", se = FALSE, colour="black")+
-  stat_regline_equation(label.x=0.35, label.y=-0.012) +
-  stat_cor(aes(label=..rr.label..), label.x=0.35, label.y=-0.013)+
+  stat_regline_equation(label.x=0.35, label.y=4.5) +
+  stat_cor(aes(label=..rr.label..), label.x=0.35, label.y=4)+
   theme(axis.text.y = element_text(size= 22),
         axis.title.x = element_text(size = 24, margin=margin(20,0,0,0)),
         axis.title.y = element_text(size = 24, margin=margin(0,20,0,0)),
@@ -306,7 +503,8 @@ ggplot(b3, aes(sUVa, Rate.DOC.ave))+
         plot.title=element_text(size=30, face="bold"),
         legend.text=element_text(size=26),
         legend.title = element_blank())+
-    facet_grid(.~Lake)
+  stat_cor(method = "pearson", label.x = 0.30, label.y = 5)+
+    facet_grid(.~Position)
 
 
   

@@ -19,7 +19,6 @@ The following file can not be found.
 #found errors in the abs data at 365 nm. May also be errors at other wavelengths, for the inlet. Outlet seems ok and 254 nm ok
 dx <- read.table("TOC_Hg_Abs_Inlet__Hyp_outlet_2016_2019_3.txt", sep = "\t", header = TRUE)
 
-head(dx)
 ```
 
 ```{r}
@@ -36,7 +35,7 @@ library(anytime)
 #FIND variability in inlet vs outlet TOC
 outlet <- subset(dx,  Station =="Outlet")
 inlet <- subset(dx,  Station =="Inlet")
-dx<-dx[!(dx$Station=="Hypolimnion"),]
+#dx<-dx[!(dx$Station=="Hypolimnion"),]
 
 library(pastecs)
 stat.desc(outlet)
@@ -68,8 +67,8 @@ dx$sUVa_s = (dx$X254nm_s/dx$DOC_s)*100
 #dx$SAR_m = (dx$X254nm/dx$X400nm)*1000
 #dx$SAR_s = (dx$X400nm_s/dx$DOC_s)*1000
 
-dx$E2_E3_m = (dx$X254nm/dx$X365nm)
-dx$E2_E3_s = (dx$X254nm_s/dx$X365nm_s)
+dx$THg_m = (dx$X254nm/dx$X365nm)
+dx$THg_s = (dx$X254nm_s/dx$X365nm_s)
 
 dx$THGTOC_m = dx$THg_m/dx$TOC_m
 dx$THGDOC_s = dx$THg_s/dx$DOC_s
@@ -82,7 +81,7 @@ summary(dx$MeHg_rel_m)
 head(dx)
 ```
 
-```{r}
+```{r Plotting monitoring data}
 #PLOTTING with time on x-axis and year-facets
 class(dx$Date)
 class(dx$month_day)
@@ -92,7 +91,7 @@ ggplot(dx)+
   geom_point(aes(x=month_day, y=TOC_m, shape=Station, colour=Year), size=5)+
   #geom_line(aes(x=month_day, y=TOC_m, colour=Station))+
   geom_smooth(aes(x=month_day, y=TOC_m, colour=Station), shape=16, size=1)+
-  #geom_point(aes(x=month_day, y=DOC_s, colour=Station), shape=17, size=5)+
+  geom_point(aes(x=month_day, y=DOC_s, colour=Station), shape=17, size=5)+
   scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
   theme_bw()+
   labs(y = "TOC (mg/L)")+
@@ -104,16 +103,16 @@ ggplot(dx)+
     strip.text = element_text(size = 12),
     axis.title.x = element_blank(),
     axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0))
-  )
+  )+
   facet_grid(.~ Year)
   
 ggplot(dx)+
-  geom_point(aes(x=month_day, y=E2_E3_m, colour=Station), shape=16, size=5)+
+  geom_point(aes(x=month_day, y=TOC_m, colour=Station), shape=16, size=5)+
   #geom_line(aes(x=month_day, y=TOC_m, colour=Station))+
-  geom_smooth(aes(x=month_day, y=E2_E3_m, colour=Station), shape=16, size=1)+
-  #geom_point(aes(x=month_day, y=DOC_s, colour=Station), shape=17, size=5)+
+  geom_smooth(aes(x=month_day, y=TOC_m, colour=Station), shape=16, size=1)+
+  geom_point(aes(x=month_day, y=DOC_s, colour=Station), shape=17, size=5)+
   scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
-  theme_bw()
+  theme_bw()+
   labs(y = "TOC (mg/L)")+
    theme(
     legend.text = element_text(size = 14),
@@ -189,10 +188,10 @@ ggplot(dx)+
 ggplot(dx)+
   geom_point(aes(x=Date, y=TOC_m, colour=Station), shape=16, size=5)+
   geom_smooth(aes(x=Date, y=TOC_m, colour=Station), shape=16, size=2)+
-  #geom_point(aes(x=month_day, y=E2_E3_s, colour=Station), shape=17, size=5)+
+  #geom_point(aes(x=month_day, y=THg_s, colour=Station), shape=17, size=5)+
   scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
   theme_bw()+
-     labs(y = "E2_E3")+
+     labs(y = "THg")+
    theme(
     legend.text = element_text(size = 14),
     legend.title = element_text(size = 14),
@@ -205,12 +204,12 @@ ggplot(dx)+
   facet_grid(.~ Year)  
 
 ggplot(dx)+
-  geom_point(aes(x=month_day, y=E2_E3_m, colour=Station), shape=16, size=5)+
-  geom_smooth(aes(x=month_day, y=E2_E3_m, colour=Station), shape=16, size=2)+
-  #geom_point(aes(x=month_day, y=E2_E3_s, colour=Station), shape=17, size=5)+
+  geom_point(aes(x=month_day, y=THg_m, colour=Station), shape=16, size=5)+
+  geom_smooth(aes(x=month_day, y=THg_m, colour=Station), shape=16, size=2)+
+  #geom_point(aes(x=month_day, y=THg_s, colour=Station), shape=17, size=5)+
   scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
   theme_bw()+
-     labs(y = "E2_E3")+
+     labs(y = "THg")+
    theme(
     legend.text = element_text(size = 14),
     legend.title = element_text(size = 14),
@@ -225,7 +224,7 @@ ggplot(dx)+
 ggplot(dx)+
   geom_point(aes(x=month_day, y=SAR_m, colour=Station), shape=16, size=5)+
   geom_smooth(aes(x=month_day, y=SAR_m, colour=Station), shape=16, size=2)+
-  #geom_point(aes(x=month_day, y=E2_E3_s, colour=Station), shape=17, size=5)+
+  #geom_point(aes(x=month_day, y=THg_s, colour=Station), shape=17, size=5)+
   scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
   theme_bw()+
   labs(y = "SAR")+
@@ -260,20 +259,179 @@ geom_point(aes(x=Date, y=labile_s, colour=Station), shape=17, size=5)+
 head(dx)
 ```
 
-something trange with E2_E3, needs to investigae
+something trange with THg, needs to investigae
 ```{r}
 write.csv(dx, "climer checkin.csv")
 ```
 
-```{r}
-# Pairwise comparisons
-pwc <- dx %>%
-  pairwise_t_test(E2_E3_m ~ Station, paired=FALSE, alternative= "two.sided")
-pwc
+21.06.2024 - test for significant difference between inlet and outlet in 
+TOC, sUVa, THg, THg and THg-TOC
+- first check if data is normally distrubuted (Shapiro-wilk test)
+From the output, the p-value > 0.05 implying that the distribution of the data are not significantly different from normal distribution. In other words, we can assume the normality.
+- then perform corrct test (t-test or Mann Whitney )
 
-pwc <- dx %>%
-  pairwise_t_test(sUVa ~ Size, paired=FALSE, alternative= "two.sided")
-pwc
+If the sample size is large enough (n > 30), we can ignore the distribution of the data and use parametric tests.
+```{r normal ditribution and difference inlet/outlet}
+library(dplyr)
+library(ggpubr)
+
+inlet_TOC <- subset(dx, Station == "Inlet")
+outlet_TOC <- subset(dx, Station == "Outlet")
+length(inlet_TOC$TOC)
+length(outlet_TOC$TOC)
+
+#Visual inspection: density plot and QQ plot
+ggdensity(inlet_TOC$TOC, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggdensity(outlet_TOC$TOC, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggqqplot(inlet_TOC$TOC)
+ggqqplot(outlet_TOC$TOC)
+
+#Normality test
+shapiro.test(inlet_TOC$TOC)
+shapiro.test(outlet_TOC$TOC)
+
+```
+
+```{r sUVa normality test}
+inlet_sUVa_m <- subset(dx, Station == "Inlet")
+outlet_sUVa_m <- subset(dx, Station == "Outlet")
+length(inlet_sUVa_m$sUVa_m)
+length(outlet_sUVa_m$sUVa_m)
+
+#Visual inspection: density plot and QQ plot
+ggdensity(inlet_sUVa_m$sUVa_m, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggdensity(outlet_sUVa_m$sUVa_m, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggqqplot(inlet_sUVa_m$sUVa_m)
+ggqqplot(outlet_sUVa_m$sUVa_m)
+
+#Normality test
+shapiro.test(inlet_sUVa_m$sUVa_m)
+shapiro.test(outlet_sUVa_m$sUVa_m)
+```
+
+```{r E2_E3 normality test}
+
+inlet_E2_E3_m <- subset(dx, Station == "Inlet")
+outlet_E2_E3_m <- subset(dx, Station == "Outlet")
+length(inlet_E2_E3_m$E2_E3_m)
+length(outlet_E2_E3_m$E2_E3_m)
+
+#Visual inspection: density plot and QQ plot
+ggdensity(inlet_E2_E3_m$E2_E3_m, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggdensity(outlet_E2_E3_m$E2_E3_m, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggqqplot(inlet_E2_E3_m$E2_E3_m)
+ggqqplot(outlet_E2_E3_m$E2_E3_m)
+
+#Normality test
+shapiro.test(inlet_E2_E3_m$E2_E3_m)
+shapiro.test(outlet_E2_E3_m$E2_E3_m)
+```
+
+```{r THg normality test}
+
+inlet_THg_m <- subset(dx, Station == "Inlet")
+outlet_THg_m <- subset(dx, Station == "Outlet")
+length(inlet_THg_m$THg_m)
+length(outlet_THg_m$THg_m)
+
+#Visual inspection: density plot and QQ plot
+ggdensity(inlet_THg_m$THg_m, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggdensity(outlet_THg_m$THg_m, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggqqplot(inlet_THg_m$THg_m)
+ggqqplot(outlet_THg_m$THg_m)
+
+#Normality test
+shapiro.test(inlet_THg_m$THg_m)
+shapiro.test(outlet_THg_m$THg_m)
+```
+
+```{r THgTOC_TOC normality testing}
+
+inlet_THGTOC_m <- subset(dx, Station == "Inlet")
+outlet_THGTOC_m <- subset(dx, Station == "Outlet")
+length(inlet_THGTOC_m$THGTOC_m)
+length(outlet_THGTOC_m$THGTOC_m)
+
+#Visual inspection: density plot and QQ plot
+ggdensity(inlet_THGTOC_m$THGTOC_m, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggdensity(outlet_THGTOC_m$THGTOC_m, 
+          main = "Density plot of tooth length",
+          xlab = "Tooth length")
+
+ggqqplot(inlet_THGTOC_m$THGTOC_m)
+ggqqplot(outlet_THGTOC_m$THGTOC_m)
+
+#Normality test
+shapiro.test(inlet_THGTOC_m$THGTOC_m)
+shapiro.test(outlet_THGTOC_m$THGTOC_m)
+```
+
+
+
+```{r}
+library(rstatix)
+# Pairwise comparisons
+
+library("ggpubr")
+class(HMW$sUVa)
+ggboxplot(dx, x = "Station", y = "THGTOC_m", 
+          color = "Station", palette = c("#00AFBB", "#E7B800"),
+          ylab = "Weight", xlab = "Groups")
+
+
+y16 <- subset(dx, Year== "2016")
+
+pwc1 <- dx %>%
+  pairwise_t_test(TOC_m ~ Station, paired=FALSE, alternative= "two.sided")
+pwc2 <- dx %>%
+  pairwise_t_test(sUVa_m ~ Station, paired=FALSE, alternative= "two.sided")
+pwc3 <- dx %>%
+  pairwise_t_test(E2_E3_m ~ Station, paired=FALSE, alternative= "two.sided")
+pwc4 <- dx %>%
+  pairwise_t_test(THg_m ~ Station, paired=FALSE, alternative= "two.sided")
+pwc5 <- dx %>%
+  pairwise_t_test(THGTOC_m ~ Station, paired=FALSE, alternative= "two.sided")
+
+pwc1
+pwc2
+pwc3
+pwc4
+pwc5
+
+
+pwc6 <- y16 %>%
+  pairwise_t_test(sUVa_m ~ Station, paired=FALSE, alternative= "two.sided")
+pwc7 <- y16 %>%
+  pairwise_t_test(E2_E3_m ~ Station, paired=FALSE, alternative= "two.sided")
+pwc6
+pwc7
 ```
 
 
@@ -284,17 +442,39 @@ head(dx)
 
 #dy<-dx[!(dx$Year=="2016"),]
 
-ggscatter(dx, x = "E2_E3_m", y = "THGTOC_m", 
+ggscatter(dx, x = "E2_E3_m", y = "THg_m", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab ="TOC (mg/L)" , ylab ="THg (ng/L)")
+  facet_grid(.~Station)
+
+ggscatter(dx, x ="sUVa_m",  y ="THg_m",  
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab ="sUVa" , ylab ="THg (ng/L)")+
+  facet_grid(.~Station)
+
+
+ggscatter(dx, x ="sUVa_m",  y ="THGTOC_m",  
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.method = "pearson",
           xlab ="" , ylab ="")+
   facet_grid(.~Station)
+
+ggscatter(dx, x ="E2_E3_m",  y ="THGTOC_m",  
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab ="" , ylab ="")+
+  facet_grid(.~Station)
+
+
     facet_grid(.~year(dx$Date), scales="free_x")
     
 head(dx)
+class(dx$TOC_m)
     #IMPORTANT!!! Correlation plot for Hg and DOM 
-    ggplot(dx, aes(labile_m, THGTOC_m))+
-      geom_point(size=6)+
+  ggplot(dx, aes(TOC_m, THg_m))+
+      geom_point(size=6)
       geom_smooth(method = "lm", se = FALSE, colour="black")
       facet_grid(. ~ factor(Station), scales="free")
       xlim(4, 6)
@@ -304,7 +484,7 @@ head(dx)
     head(dx)
       #Correlation analysis
       library(dplyr)
-      b <- select(dx, TOC_m, THg_m, MeHg_m, sUVa_m, sVISa_m, SAR_m, E2_E3_m, labile_m, THGTOC_m, MeHGTOC_m)
+      b <- select(dx, TOC_m, THg_m, MeHg_m, sUVa_m, sVISa_m, SAR_m, THg_m, labile_m, THGTOC_m, MeHGTOC_m)
       library(Hmisc)
       rcorr(as.matrix(b), type="pearson")
       class(d)
@@ -325,6 +505,35 @@ head(dx)
 model <- lm(THGTOC_m ~ sVISa_m, data = dx)
 model  
 summary(model)
+```
+
+## Sumamry table
+
+```{r create summary table}
+library(dplyr)
+library(rbind)
+
+dxy <- do.call(rbind.data.frame, dx)
+
+#dx_sum <- dx[c("Station", "TOC_m", "THg_m", "sUVa_m", "THg_m")]
+dx_sum <- select(dx, "Station", "TOC_m", "THg_m", "sUVa_m", "THg_m")
+
+typeof(dx_sum)
+class(dx_sum$TOC_m)
+
+
+
+
+sum <- dx_sum %>% 
+  group_by(Station) %>% 
+  summarise(across(.cols  = where(is.numeric), .f = list(mean = mean, min = min, max = max, sd = sd), na.rm = TRUE))
+  
+sum_n <- dx_sum %>% 
+  group_by(Station) %>% 
+  length(across(.cols  = where(is.numeric)))
+
+write.csv(sum, "summary monitoing.csv")
+
 ```
 
   
@@ -353,7 +562,7 @@ head(dx)
     head(dx)
       #Correlation analysis
       library(dplyr)
-      b <- select(dx, TOC_m, THg_m, MeHg_m, sUVa_m, sVISa_m, SAR_m, E2_E3_m, labile_m, THGTOC_m, MeHGTOC_m)
+      b <- select(dx, TOC_m, THg_m, MeHg_m, sUVa_m, sVISa_m, SAR_m, THg_m, labile_m, THGTOC_m, MeHGTOC_m)
       library(Hmisc)
       rcorr(as.matrix(b), type="pearson")
       class(d)
