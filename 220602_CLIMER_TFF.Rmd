@@ -6,7 +6,6 @@ output: html_document
 editor_options: 
   chunk_output_type: console
 ---
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -182,8 +181,6 @@ wilcox.test(E2_E3 ~ Position, data=HMW)
 ```
 
 
-
-
 ```{r}
 # Load required R packages
 library(tidyverse)
@@ -216,21 +213,29 @@ head(dx)
 
 #dy<-dx[!(dx$Year=="2016"),]
 
-ggscatter(dx, x = "sUVa", y = "THg" , 
+ggscatter(dx, x = "sUVa", y = "THg_DOC" , 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.method = "pearson",
-          xlab ="" , ylab ="")+
-  facet_grid(.~Size)
+          xlab ="sUva" , ylab ="Hg:DOC")+
+  facet_grid(.~Position)
 ```
 
 
 #1) Boxplot
 - look for differences between LMW and HMW optical properties
 ```{r Boxplot}
-ggplot(dx, aes(x=Size, y= DOC_UiO))+
+ggplot(dx, aes(x=Size, y= sUVa))+
+  geom_boxplot()
+  facet_grid(.~Position)
+ 
+LMW <- subset(dx, Size=="LMW") 
+HMW <- subset(dx, Size=="HMW") 
+ggplot(HMW, aes(x=Position, y= THg_DOC))+
   geom_boxplot()
   facet_grid(.~Position)
 
+wilcox.test(THg_DOC ~ Position, data=LMW)
+  
 ```
 
 #1.1 Correlation scatter plot
@@ -240,6 +245,23 @@ ggplot(dx, aes(x=Size, y= DOC_UiO))+
 head(dx)
 #IMPORTANT!!! Correlation plot for biodeg and parameters
 ggplot(dx, aes(DOC_UiO, THg))+
+  geom_point(aes(shape=(factor(Size)), colour=interaction(Position, Size)),fill="black", size=6)+
+  geom_smooth(method = "lm", se = FALSE, colour="black")+
+  theme_bw()+
+  theme(axis.text.y = element_text(size= 22),
+        axis.title.x = element_text(size = 24, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 24, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 32),
+        axis.text.x = element_text(angle=0, hjust=0.5, vjust=0, size = 24),
+        plot.title=element_text(size=30, face="bold"),
+        legend.text=element_text(size=26),
+        legend.title = element_blank())+
+  labs(y = "Hg (ng/L)", x="DOC (mg/L)" )+
+  facet_grid(. ~ factor(Position))+
+  scale_colour_manual(values = c("#0072B2", "#CC79A7", "#bdd4ff", "#e1b0cb"))
+
+
+ggplot(dx, aes(sUVa, THg_DOC))+
   geom_point(aes(colour=interaction(factor(Size))), size=6)+
   geom_smooth(method = "lm", se = FALSE, colour="black")+
   theme(axis.text.y = element_text(size= 22),
@@ -338,7 +360,7 @@ d <- subset(d, Lake == "Inlet"| Lake =="Outlet")
 d <- subset(d, Fraction == "LMW"| Fraction =="HMW")
 head(dx)
 #IMPORTANT!!! Correlation plot for biodeg and parameters
-ggplot(dx, aes(DOC_natural, DOC_TFF))+
+ggplot(dx, aes(THg_DOC, sUVa))+
   geom_point(aes(colour=interaction(factor(Size))), size=6)+
   geom_smooth(method = "lm", se = FALSE, colour="black")+
   facet_grid(. ~ factor(Position))+
@@ -359,8 +381,8 @@ ylim(0, -0.007)+
 ## Biodegradation data
 ```{r}
 b1 <- read.table("Copy of Climer_Biodeg_3.txt", sep = "\t", header = TRUE, fill=TRUE)
-
 b2 <- subset(b1, Lake!="Hypolimnion")
+
 b3<-subset(b2,Fraction!="Bulk")
 
 #Rate.DOC.ave
@@ -374,10 +396,28 @@ ggplot(LM, aes(x=Fraction, y= Rate.DOC.ave, fill=Fraction))+
   facet_grid(.~Lake)+
   scale_y_reverse() 
  
+#Relative biodeg
+rel_biodeg <- ggplot(b3, aes(x=Fraction, y= Rel.rate.DOC))+
+  geom_boxplot(aes(fill=interaction(Lake, Fraction)))+
+  facet_grid(.~Lake)+
+  scale_fill_manual(values = c("#0072B2", "#CC79A7", "#bdd4ff", "#e1b0cb"))+
+  theme_bw()+
+  theme(axis.text.y = element_text(size= 14, colour="black"),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 18, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 19),
+        axis.text.x = element_text(angle=0, hjust=0.5, vjust=0, size = 16, colour="black"),
+        plot.title=element_text(size=30, face="bold"),
+        legend.text=element_blank(),
+        legend.title = element_blank())+
+  labs(y = "DOC biodegradation rate (%)", x="Size fraction" )+
+  scale_x_discrete(limits=rev)
 
-ggplot(b3, aes(x=Fraction, y= Rel.rate.DOC))+
-  geom_boxplot()+
-  facet_grid(.~Lake)
+ggsave(filename = "output/rel_biodeg.png",
+       plot = rel_biodeg,
+       width = 7, height = 5, units = "in")
+
+
 
 ggplot(b3, aes(x=Lake, y= Rate.DOC.ave, fill=Lake))+
   geom_boxplot()+
@@ -389,6 +429,48 @@ ggplot(b2, aes(x=Lake, y= Rate.DOC.ave, fill=Lake))+
   facet_grid(.~Fraction)
 
 ```
+
+## summary biodeg
+```{r}
+library(dplyr)
+library(rbind)
+
+library(janitor)
+detach(package:plyr)
+#dx_sum <- dx[c("Station", "TOC_m", "THg_m", "sUVa_m", "THg_m")]
+b2_sum <- select(b2, "group", "Rate_C_mg_ave", "Rate.DOC.ave")
+bs_sum <- na.omit(b2_sum)
+
+class(bs_sum$Rate.DOC.ave)
+
+
+ss <- bs_sum %>%
+  group_by(group) %>%
+  summarise(mean = mean(Rate_C_mg_ave), sd=sd(Rate_C_mg_ave), min=min(Rate_C_mg_ave), max=max(Rate_C_mg_ave))
+
+sss <- bs_sum %>%
+  group_by(group) %>%
+  summarise(mean = mean(Rate.DOC.ave), sd=sd(Rate.DOC.ave), min=min(Rate.DOC.ave), max=max(Rate.DOC.ave))
+
+
+sum_nx <- bs_sum %>% 
+  group_by(group) %>% 
+  length(dplyr::across(.cols  = where(is.numeric)))
+
+
+
+
+
+
+bs_sum %>% count(Rate_C_mg_ave)
+
+
+s <- summarise(bs_sum, Rate_C_mg_ave, Rate.DOC.ave, .by = NULL, .groups = group)
+
+
+```
+
+
 
 ## Test for normality and significant difference
 ```{r}
@@ -440,21 +522,58 @@ wilcox.test(E2_E3 ~ Position, data=HMW)
 ## Correlation plots with biodeg data
 
 ```{r}
-ggplot(b3, aes( E2_E3, Rate.DOC.ave))+
-  geom_point(size=6, aes(shape=Fraction, colour=Fraction))+
+
+outlet <- subset(b3, Lake == "Outlet")
+out2 <- subset(outlet, sUVa > 2)
+
+ggplot(b3, aes(sUVa, Rate.DOC.ave))+
+  geom_point(aes(shape=factor(Fraction), colour=interaction(Lake, Fraction)),fill="black", size=5)+
   geom_smooth(method = "lm", se = FALSE, colour="black")+
-  stat_regline_equation(label.x=0.35, label.y=-0.007) +
-  stat_cor(aes(label=..rr.label..), label.x=0.35, label.y=-0.008)+
-  theme(axis.text.y = element_text(size= 22),
-        axis.title.x = element_text(size = 24, margin=margin(20,0,0,0)),
-        axis.title.y = element_text(size = 24, margin=margin(0,20,0,0)),
-        strip.text.x = element_text(size = 32),
-        axis.text.x = element_text(angle=0, hjust=0.5, vjust=0, size = 24),
+  stat_regline_equation(label.x=0.35, label.y=0.0098) +
+  #stat_cor(aes(label=..rr.label..), label.x=0.35, label.y=-0.008)+
+  theme(axis.text.y = element_text(size= 12, colour="black"),
+        axis.title.x = element_text(size = 14, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 14, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 32, colour="black"),
+        axis.text.x = element_text(angle=0, hjust=0.5, vjust=0, size = 14),
         plot.title=element_text(size=30, face="bold"),
-        legend.text=element_text(size=26),
+        legend.text=element_blank(),
         legend.title = element_blank())+
-  stat_cor(method = "pearson", label.x = 0.30, label.y = -0.009)+
-    facet_grid(.~Lake)
+  stat_cor(method = "pearson", label.x = 0.30, label.y = 0.011)+
+  scale_colour_manual(values = c("#0072B2", "#CC79A7", "#bdd4ff", "#e1b0cb"))+
+  scale_y_reverse()+
+  theme_bw()+
+  labs(y= "DOC biodegradation rate (mg C/mg C)", x="sUVa-254 (L/mg C m)")+
+  facet_grid(.~Lake)
+
+
+
+ggsave(filename = "output/biodeg_suva.png",
+       plot = biodeg_suva,
+       width = 9.5, height = 5, units = "in")
+    
+
+ggplot(b3, aes(E2_E3, Rate.DOC.ave))+
+  geom_point(aes(shape=factor(Fraction), colour=interaction(Lake, Fraction)),fill="black", size=5)+
+  geom_smooth(method = "lm", se = FALSE, colour="black")+
+  stat_regline_equation(label.x=0.35, label.y=0.0098) +
+  #stat_cor(aes(label=..rr.label..), label.x=0.35, label.y=-0.008)+
+  theme(axis.text.y = element_text(size= 12, colour="black"),
+        axis.title.x = element_text(size = 14, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 14, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 32, colour="black"),
+        axis.text.x = element_text(angle=0, hjust=0.5, vjust=0, size = 14),
+        plot.title=element_text(size=30, face="bold"),
+        legend.text=element_blank(),
+        legend.title = element_blank())+
+  stat_cor(method = "pearson", label.x = 0.30, label.y = 0.011)+
+  scale_colour_manual(values = c("#0072B2", "#CC79A7", "#bdd4ff", "#e1b0cb"))+
+  scale_y_reverse()+
+  theme_bw()+
+  labs(y= "DOC biodegradation rate (mg C/mg C)", x="sUVa-254 (L/mg C m)")+
+  facet_grid(.~Lake)
+
+
 ```
 
 #Correlation plots, LMW/HMW, and INlet/Outlet
@@ -490,11 +609,11 @@ HM <- subset(b3, Fraction=="HMW")
 Inl <- subset(b3, Lake=="Inlet")
 Outl <- subset(b3, Lake=="Outlet")
 
-ggplot(dx, aes(sUVa, THg_DOC))+
-  geom_point(size=6, aes(shape=Size, colour=Size))+
+
+ggplot(dx, aes(DOC_UiO, THg))+
+  geom_point(aes(shape=(factor(Size)), colour=interaction(Position, Size)),fill="black", size=6)+
   geom_smooth(method = "lm", se = FALSE, colour="black")+
-  stat_regline_equation(label.x=0.35, label.y=4.5) +
-  stat_cor(aes(label=..rr.label..), label.x=0.35, label.y=4)+
+  theme_bw()+
   theme(axis.text.y = element_text(size= 22),
         axis.title.x = element_text(size = 24, margin=margin(20,0,0,0)),
         axis.title.y = element_text(size = 24, margin=margin(0,20,0,0)),
@@ -503,8 +622,46 @@ ggplot(dx, aes(sUVa, THg_DOC))+
         plot.title=element_text(size=30, face="bold"),
         legend.text=element_text(size=26),
         legend.title = element_blank())+
-  stat_cor(method = "pearson", label.x = 0.30, label.y = 5)+
-    facet_grid(.~Position)
+  labs(y = "Hg (ng/L)", x="DOC (mg/L)" )+
+  facet_grid(. ~ factor(Position))+
+  scale_colour_manual(values = c("#0072B2", "#CC79A7", "#bdd4ff", "#e1b0cb"))
+
+
+
+#FOR manuscript, TOC and Hg in grab samples
+Hg_TOC <- ggplot(dx, aes(DOC_UiO, as.numeric(THg)))+
+  geom_point(aes(shape=factor(Size), colour=interaction(Position, Size)),fill="black", size=5)+
+  geom_smooth(method = "lm", se = FALSE, colour="black")+
+  stat_regline_equation(label.x=0.35, label.y=5.5) +
+  #stat_cor(aes(label=..rr.label..), label.x=0.35, label.y=4)+
+  theme(axis.text.y = element_text(size= 14),
+        axis.title.x = element_text(size = 15, margin=margin(20,0,0,0)),
+        axis.title.y = element_text(size = 15, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 16),
+        axis.text.x = element_text(angle=0, hjust=0.5, vjust=0, size = 14),
+        plot.title=element_text(size=12, face="bold"),
+        legend.text=element_blank(),
+        legend.title = element_blank())+
+  stat_cor(method = "pearson", label.x = 0.30, label.y = 5.8)+
+  labs(x="DOC (mg/L)", y="Hg (ng/L)")+
+  facet_grid(.~Position)+
+  scale_colour_manual(values = c("#0072B2", "#CC79A7", "#bdd4ff", "#e1b0cb"))
+
+ggsave(filename = "output/Hg_TOC_corr.png",
+       plot = Hg_TOC,
+       width = 7, height = 5, units = "in")
+
+
+
+
+
+
+
+
+
+
+
+
 
 
   
