@@ -686,10 +686,8 @@ dx_ts_outlet <- subset(dx_ts, Station == "Outlet") #daily?
 # 1. Create a new data.frame that has a full sequence of dates, one for inlet and one for outlet
 full_out <- data.frame(
   Date = seq(min(dx_ts_outlet$Date), max(dx_ts_outlet$Date), by = "day"))
-
 full_in <- data.frame(
   Date = seq(min(dx_ts_inlet$Date), max(dx_ts_inlet$Date), by = "day"))
-
 
 # 2. Merge with the old one on the `date` column
 new_ts_out <- merge(full_out, dx_ts_outlet, by = "Date", all.x = TRUE)
@@ -710,8 +708,9 @@ new_ts_out1$inter_THg_out <- na.approx(new_ts_out1$THg_m, na.rm = TRUE)
 new_ts_in1$inter_THg_in <- na.approx(new_ts_in1$THg_m)
 
 #simple plots
-qplot(x=Date, y=TOC_m,data=new_ts)
+qplot(x=Date, y=TOC_m,data=dx_ts)+
   facet_grid(Station~.)
+
 qplot(x=Date, y=THg_m, data=dx_ts)+
   facet_grid(Station~.)
 
@@ -722,33 +721,66 @@ qplot(x=Date, y=THg_m, data=dx_ts)+
 #frequency(ts3)
 #class(ts3)
 
-A1_out <- ts(new_ts_out, frequency=365)
-A1_inl <- ts(new_ts_inl, frequency=365)
+A1_out <- ts(new_ts_out, frequency=365) #TOC data outlet
+A1_inl <- ts(new_ts_in, frequency=365)  #TOC data inlet
 
-B1_out <- ts(new_ts_out1, frequency=365)
-B1_inl <- ts(new_ts_in1, frequency=365)
+B1_out <- ts(new_ts_out1, frequency=365) #Hg data outlet
+B1_inl <- ts(new_ts_in1, frequency=365)  #Hg data inlet
 
+library(stats)
+#decomp <- stl(A1_out[,5], s.window = "periodic") #date is not on x axis
+res1<- (stl(ts(A1_out[,5],frequency=365,start=c(2016,2 )),s.window="per",robust=TRUE) )#fixes date
+res2<- (stl(ts(A1_inl[,5],frequency=365,start=c(2016,31)),s.window="per",robust=TRUE) )#fixes date
+
+res3<- (stl(ts(B1_out[,5],frequency=365,start=c(2016,31 )),s.window="per",robust=TRUE) )#fixes date
+res4<- (stl(ts(B1_inl[,5],frequency=365,start=c(2016,31)),s.window="per",robust=TRUE) )#fixes date
+
+plot(res1)+title("Langtjern TOC outlet")
+plot(res2)+title("Langtjern TOC inlet")
+plot(res3)+title("Langtjern Hg outlet")
+plot(res4)+title("Langtjern Hg inlet")
+
+nrow(dx_ts_outlet)
+nrow(A1_out)
+
+#EXTRACT AND LOOK FOR CORRELATIONS
+plot(res1$seasonal, res2$seasonal) 
+
+res2
+
+
+#the following can possibly be deleted: 
 
 # Perform additive decomposition
-decomposed_TOC_out <- decompose(A1_out[,5], type = "additive")
-decomposed_TOC_in <- decompose(A1_inl[,5], type = "additive")
+decomposed_TOC_out <- decompose(A1_out[,5], type = "multiplicative")
+decomposed_TOC_in <- decompose(A1_inl[,5], type = "multiplicative")
 
-decomposed_Hg_out <- decompose(B1_out[,6], type = "additive")
-decomposed_Hg_in <- decompose(B1_inl[,6], type = "additive")
-
+decomposed_Hg_out <- decompose(B1_out[,6], type = "multiplicative")
+decomposed_Hg_in <- decompose(B1_inl[,6], type = "multiplicative")
 
 #stl_decomposed_data <- stl(A1[,2], s.window = "periodic")
 #plot(stl_decomposed_data)
-plot(decomposed_data_inl)
+class(decomposed_TOC_in)
+
+#We need the date info back, and to correlate the seasonal/trend lines. 
+decomposed_TOC_in
+
+plot(decomposed_TOC_in)
 title("Langtjern TOC inlet")
 
+plot(decomposed_TOC_out)
+title("Langtjern TOC outlet")
+
 plot(decomposed_Hg_out)
+title("Langtjern Hg outlet")
+
+plot(decomposed_Hg_in)
 title("Langtjern Hg inlet")
 
-plot(decomposed_data$trend, decomposed_data_inl$trend)  
+plot(decomposed_TOC_out$x, decomposed_TOC_in$x)  
 
 # Plot the decomposition
-plot(decomposed_data)
+plot(decomposed_TOC)
 
 #extract to assess correlation
 TOC_o_s1 <- decomposed_TOC_out$seasonal;  TOC_o_t1 <- decomposed_TOC_out$trend;  TOC_o_r1 <- decomposed_TOC_out$random
