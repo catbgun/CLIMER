@@ -363,9 +363,17 @@ shapiro.test(outlet_THGTOC_m$THGTOC_m)
 library(rstatix)
 # Pairwise comparisons
 
+#suva not significantly different inlet and outlet, but what about during summer only?
+# Values to keep
+summer <- c( 6, 7, 8)
+
+# Remove rows where the city is in the cities_to_remove vector
+filtered_dx2 <- dx2[(dx2$month %in% summer), ]
+
+
 library("ggpubr")
 class(HMW$sUVa)
-ggboxplot(dx, x = "Station", y = "THGTOC_m2", 
+ggboxplot(filtered_dx2, x = "Station", y = "sUVa_m", 
           color = "Station", palette = c("#00AFBB", "#E7B800"),
           ylab = "Weight", xlab = "Groups")
 
@@ -380,6 +388,11 @@ pwc4 <- dx %>%
   pairwise_t_test(THg_m ~ Station, paired=FALSE, alternative= "two.sided")
 pwc5 <- dx %>%
   pairwise_t_test(THGTOC_m2 ~ Station, paired=FALSE, alternative= "two.sided")
+
+pwc6 <- filtered_dx2 %>%
+  pairwise_t_test(sUVa_m ~ Station, paired=FALSE, alternative= "two.sided")
+
+pwc6
 
 pwc1
 pwc2
@@ -438,6 +451,7 @@ class(dx2$month)
 # Values to remove
 s_melt <- c(4, 5) #valid for inlet
 #s_melt2 <- c(4, 5, 6, 7) #testing for outlet. Did not help!
+s_melt2 <- c( 5,6)
 
 # Remove rows where the city is in the cities_to_remove vector
 filtered_dx2 <- dx2[!(dx2$month %in% s_melt), ]
@@ -448,18 +462,18 @@ ggplot(filtered_dx2)+
   geom_point(aes(x =(sUVa_m), y = (THg_m), colour=as.factor(month), shape=season), size=3)+
   facet_grid(.~Station)
 
-  ggplot(dx2)+
+ggplot(dx2)+
   geom_point(aes(x =(TOC_m), y = (THg_m), colour=as.factor(season)))+
   facet_grid(.~Station)
 
 
-ggscatter(dx2, x = "TOC_m", y = "THg_m", #why no correlation to suva? greater seasonality in suva than TOC?
+ggscatter(filtered_dx2, x = "TOC_m", y = "THg_m", #why no correlation to suva? greater seasonality in suva than TOC?
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.method = "pearson",
           xlab ="TOC (mg/L)" , ylab ="THg (ng/L)")+
           facet_grid(.~Station)
 
-ggscatter(filtered_dx2, x ="sUVa_m",  y ="THg_m",  
+ggscatter(dx2, x ="TOC_m",  y ="THg_m",  
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.method = "pearson",
           xlab ="sUVa" , ylab ="THg (ng/L)")+
@@ -524,7 +538,7 @@ summary(model)
 Upload and fix discharge data
 - add to dx_ts?
 ```{r}
-dx_ts <- dx[,c(3:6, 19)]
+dx_ts <- dx[,c(3:6, 19, 40)]
 
 dis <- read.table("Langtjern_discharge.txt", sep = "\t", header = TRUE)
 dis$Date <- as.Date(dis$Date,format = "%d/%m/%Y")
@@ -632,6 +646,10 @@ new_ts_in2 <- new_ts_in[c(1:2165),]    #Specify dates to be included to avoid le
 new_ts_out3 <- new_ts_out[c(1:2189),] #Specify dates to be included to avoid leading or ending NAs
 new_ts_in3 <- new_ts_in[c(1:2165),]    #Specify dates to be included to avoid leading or ending NAs
 
+#Hg-to-DOC
+new_ts_out4 <- new_ts_out[c(30:2189),] #Specify dates to be included to avoid leading or ending NAs
+new_ts_in4 <- new_ts_in[c(1:2165),]    #Specify dates to be included to avoid leading or ending NAs
+
 new_ts_out1$inter_TOC_out <- na.approx(new_ts_out1$TOC_m)
 new_ts_in1$inter_TOC_in <- na.approx(new_ts_in1$TOC_m)
 
@@ -643,6 +661,9 @@ new_ts_in1$inter_sUVa_in <- na.approx(new_ts_in1$sUVa_m)
 
 new_ts_out3$inter_Dis_out <- na.approx(new_ts_out3$Disch, na.rm = TRUE)
 new_ts_in3$inter_Dis_in <- na.approx(new_ts_in3$Disch)
+
+new_ts_out4$inter_THgTOC_out <- na.approx(new_ts_out4$THGTOC_m2, na.rm = TRUE)
+new_ts_in4$inter_THgTOC_in <- na.approx(new_ts_in4$THGTOC_m2)
 
 #simple plots
 qplot(x=Date, y=TOC_m,data=dx_ts)+
@@ -668,19 +689,25 @@ B1_inl <- ts(new_ts_in2, frequency=365)  #Hg data inlet
 C1_out <- ts(new_ts_out3, frequency=365) #Discharge data outlet
 C1_inl <- ts(new_ts_in3, frequency=365)  #Discharge data inlet
 
+D1_out <- ts(new_ts_out4, frequency=365) #Discharge data outlet
+D1_inl <- ts(new_ts_in4, frequency=365)  #Discharge data inlet
+
 library(stats)
 #decomp <- stl(A1_out[,5], s.window = "periodic") #date is not on x axis
-res1<- (stl(ts(A1_out[,8],frequency=365,start=c(2016,2 )),s.window="periodic",robust=TRUE) )#fixes date. TOC outlet
-res2<- (stl(ts(A1_inl[,8],frequency=365,start=c(2016,31)),s.window="per",robust=TRUE) )#fixes date. TOC inlet
+res1<- (stl(ts(A1_out[,9],frequency=365,start=c(2016,2 )),s.window="periodic",robust=TRUE) )#fixes date. TOC outlet
+res2<- (stl(ts(A1_inl[,9],frequency=365,start=c(2016,31)),s.window="per",robust=TRUE) )#fixes date. TOC inlet
 
-res3<- (stl(ts(B1_out[,8],frequency=365,start=c(2016,31 )),s.window="per",robust=TRUE) )#fixes date. Hg outlet
-res4<- (stl(ts(B1_inl[,8],frequency=365,start=c(2016,31)),s.window="per",robust=TRUE) )#fixes date. Hg inlet
+res3<- (stl(ts(B1_out[,9],frequency=365,start=c(2016,31 )),s.window="per",robust=TRUE) )#fixes date. Hg outlet
+res4<- (stl(ts(B1_inl[,9],frequency=365,start=c(2016,31)),s.window="per",robust=TRUE) )#fixes date. Hg inlet
 
-res5<- (stl(ts(A1_out[,9],frequency=365,start=c(2016,2 )),s.window="per",robust=TRUE) )#fixes date. sUVa outlet
-res6<- (stl(ts(A1_inl[,9],frequency=365,start=c(2016,31)),s.window="per",robust=TRUE) )#fixes date. sUVa inlet
+res5<- (stl(ts(A1_out[,10],frequency=365,start=c(2016,2 )),s.window="per",robust=TRUE) )#fixes date. sUVa outlet
+res6<- (stl(ts(A1_inl[,10],frequency=365,start=c(2016,31)),s.window="per",robust=TRUE) )#fixes date. sUVa inlet
 
-res7<- (stl(ts(C1_out[,8],frequency=365,start=c(2016,2 )),s.window="periodic",robust=TRUE) )#fixes date. disch outlet
-res8<- (stl(ts(C1_inl[,8],frequency=365,start=c(2016,31)),s.window="per",robust=TRUE) )#fixes date. disch inlet
+res7<- (stl(ts(C1_out[,9],frequency=365,start=c(2016,2 )),s.window="periodic",robust=TRUE) )#fixes date. disch outlet
+res8<- (stl(ts(C1_inl[,9],frequency=365,start=c(2016,31)),s.window="per",robust=TRUE) )#fixes date. disch inlet
+
+res9<- (stl(ts(D1_out[,9],frequency=365,start=c(2016,2 )),s.window="periodic",robust=TRUE) )#fixes date. THg:DOC outlet
+res10<- (stl(ts(D1_inl[,9],frequency=365,start=c(2016,31)),s.window="per",robust=TRUE) )#fixes date. THg:DOC inlet
 
 plot(res1)+title("Langtjern TOC outlet")
 plot(res2)+title("Langtjern TOC inlet")
@@ -688,8 +715,11 @@ plot(res3)+title("Langtjern Hg outlet")
 plot(res4)+title("Langtjern Hg inlet")
 plot(res5)+title("Langtjern sUVa outlet")
 plot(res6)+title("Langtjern sUVa inlet")
-plot(res7)+title("Langtjern discharge outlet")
-plot(res8)+title("Langtjern discharge inlet")
+plot(res7)+title("Langtjern water discharge outlet")
+plot(res8)+title("Langtjern water discharge inlet")
+
+plot(res9)+title("Langtjern Hg:DOC outlet")
+plot(res10)+title("Langtjern Hg:DOC inlet")
 
 df <- data.frame(matrix(unlist(res1), nrow=length(res1), byrow=TRUE))
 
@@ -702,6 +732,9 @@ sUVa_out <- as.data.frame(res5$time.series)
 sUVa_in <- as.data.frame(res6$time.series)
 dis_out <- as.data.frame(res7$time.series)
 dis_in <- as.data.frame(res8$time.series)
+
+THgDOC_out <- as.data.frame(res9$time.series)
+THgDOC_in <- as.data.frame(res10$time.series)
 
 #ADD DATE COLUMN
 # 2. Define the start date, number of periods, and frequency
@@ -717,6 +750,9 @@ num_periods6 <- nrow(sUVa_in) # Match the number of rows in the dataframe. sUVa
 num_periods7 <- nrow(dis_out) # Match the number of rows in the dataframe. discharge
 num_periods8 <- nrow(dis_in) # Match the number of rows in the dataframe. discharge
 
+num_periods9 <- nrow(THgDOC_out) # Match the number of rows in the dataframe. discharge
+num_periods10 <- nrow(THgDOC_in) # Match the number of rows in the dataframe. discharge
+
 frequency <- "days" # Can be "days", "weeks", "months", "years", etc.
 
 # 3. Generate the date sequence using seq()
@@ -729,6 +765,9 @@ date_sequence6 <- seq(from = start_date2, by = frequency, length.out = num_perio
 date_sequence7 <- seq(from = start_date2, by = frequency, length.out = num_periods7)
 date_sequence8 <- seq(from = start_date2, by = frequency, length.out = num_periods8)
 
+date_sequence9 <- seq(from = start_date2, by = frequency, length.out = num_periods9)
+date_sequence10 <- seq(from = start_date2, by = frequency, length.out = num_periods10)
+
 # 4. Add the date sequence as a new column to the dataframe
 TOC_out$Date <- date_sequence1
 TOC_in$Date <- date_sequence2
@@ -738,6 +777,9 @@ sUVa_out$Date <- date_sequence5
 sUVa_in$Date <- date_sequence6
 dis_out$Date <- date_sequence7
 dis_in$Date <- date_sequence8
+
+THgDOC_out$Date <- date_sequence9
+THgDOC_in$Date <- date_sequence10
 
 # Align on overlapping dates
 outlet <- merge(TOC_out[, c("Date", "seasonal", "trend", "remainder")],
@@ -765,6 +807,11 @@ outlet3x <- outlet3 %>%
          trend_dis =trend,
          remainder_dis =remainder 
   )
+
+#Add THg:DOC
+outlet4 <- merge(outlet3x[, c("Date", "seasonal_TOC", "trend_TOC", "remainder_TOC", "seasonal_Hg", "trend_Hg", "remainder_Hg", "seasonal_sUVa", "trend_sUVa", "remainder_sUVa", "seasonal_dis", "trend_dis", "remainder_dis" )],
+            THgDOC_out[, c("Date", "seasonal", "trend", "remainder")],
+            by = "Date", suffixes = c("_THgDOC"))
 
 #REPEAT THE SAME TILPASNINGER HERE AS FOR OUTLET
 inlet <- merge(TOC_in[, c("Date", "seasonal", "trend", "remainder")],
@@ -794,6 +841,11 @@ inlet3x <- inlet3 %>%
          remainder_dis =remainder 
   )
 
+#Add THg:DOC
+inlet4 <- merge(inlet3x[, c("Date", "seasonal_TOC", "trend_TOC", "remainder_TOC", "seasonal_Hg", "trend_Hg", "remainder_Hg", "seasonal_sUVa", "trend_sUVa", "remainder_sUVa", "seasonal_dis", "trend_dis", "remainder_dis" )],
+            THgDOC_in[, c("Date", "seasonal", "trend", "remainder")],
+            by = "Date", suffixes = c("_THgDOC"))
+
 #SEASONAL - out
 cor(outlet$seasonal_TOC, outlet$seasonal_Hg, use = "complete.obs")
 plot(outlet$seasonal_TOC, outlet$seasonal_Hg, use = "complete.obs")
@@ -812,27 +864,40 @@ plot(outlet$trend_TOC, outlet$trend_Hg, use = "complete.obs")
 cor(inlet$trend_TOC, inlet$trend_Hg, use = "complete.obs")
 plot(inlet$trend_TOC, inlet$trend_Hg, use = "complete.obs")
 
+inlet4$Year=format(as.Date(inlet$Date, format="%d.%m.%Y"),"%Y")
+outlet4$Year=format(as.Date(outlet$Date, format="%d.%m.%Y"),"%Y")
+
 
 #SEASONAL
-ggplot(inlet3x)+
-  geom_line(aes(x=Date, y=seasonal_Hg), colour="red")+
-  #geom_line(aes(x=Date, y=seasonal_sUVa), colour="orange")+
-  geom_line(aes(x=Date, y=seasonal_TOC), colour="darkgreen")+
-  geom_line(aes(x=Date, y=seasonal_dis), colour="blue")+
+ggplot(subset(outlet4, Year == 2018))+
+  geom_line(aes(x=Date, y=seasonal_Hg, colour="seasonal_Hg"), linewidth = 1.5)+
+  geom_line(aes(x=Date, y=seasonal_sUVa, colour="seasonal_sUVa"), linewidth = 1.5)+
+  #geom_line(aes(x=Date, y=seasonal, colour="seasonal"))+
+  geom_line(aes(x=Date, y=seasonal_TOC, colour="seasonal_TOC"), linewidth = 1.2)+
+  geom_line(aes(x=Date, y=seasonal_dis, colour="seasonal_dis"), linetype = "dashed", linewidth=1.5)+
   scale_x_date(
-    date_breaks = "2 month", # Sets a major tick mark every month
-    date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
+    date_breaks = "1 month", # Sets a major tick mark every month
+    date_labels = "%b"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
   )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-  ggtitle("Inlet - seasonal")+
-  theme(axis.title = element_blank())
-  scale_y_log10()
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title = element_blank(),
+        legend.text = element_text(size = 12))+
+  ggtitle("Outlet - seasonal")+
+  scale_colour_manual("", 
+                      labels = c("Hg", "sUVa254", "TOC", "Water discharge"),
+                      breaks = c("seasonal_Hg", "seasonal_sUVa", "seasonal_TOC", "seasonal_dis"),
+                      values = c("red", "orange", "brown", "blue")) 
+   bnscale_y_log10()
 
-ggplot(outlet3x)+
+  #  scale_colour_discrete(name = "Dose", labels = c("Hg", "sUVa254", "TOC", "Water discharge"))
+
+  
+ggplot(outlet4)+
   geom_line(aes(x=Date, y=seasonal_Hg), colour="red")+
-  #geom_line(aes(x=Date, y=seasonal_sUVa), colour="orange")+
-  geom_line(aes(x=Date, y=seasonal_TOC), colour="darkgreen")+
-  geom_line(aes(x=Date, y=seasonal_dis), colour="blue")+
+  geom_line(aes(x=Date, y=seasonal_sUVa), colour="orange")+
+  geom_line(aes(x=Date, y=seasonal), colour="purple")+
+  #geom_line(aes(x=Date, y=seasonal_TOC), colour="darkgreen")+
+  #geom_line(aes(x=Date, y=seasonal_dis), colour="blue")+
   scale_x_date(
     date_breaks = "2 month", # Sets a major tick mark every month
     date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
@@ -966,7 +1031,7 @@ ggplot(inlet2)+
 
 
 #MERGE inlet and outlet to have in the same figure
-Langtjern <- merge(inlet3x, outlet3x, by="Date")
+Langtjern <- merge(inlet4, outlet4, by="Date")
 
 #Seasonal: inlet and outlet together
 ggplot(Langtjern)+
@@ -1276,7 +1341,7 @@ nrow(inl)
 inl %>% count(THg_m)
 
 sum <- dx_sum %>% 
-  group_by(Station) %>% 
+  group_by(Station, month) %>% 
   summarise(across(.cols  = where(is.numeric), .f = list(mean = mean, min = min, max = max, sd = sd), na.rm = TRUE))
   
 #sum_n <- dx_sum %>% 
@@ -1284,7 +1349,7 @@ sum <- dx_sum %>%
 #  length(across(.cols  = where(is.numeric)))
 
 sum_n <- dx_sum %>% 
-group_by(Station) %>%
+group_by(Station, month) %>%
   summarise(
     across(
       where(is.numeric),

@@ -213,10 +213,10 @@ head(dx)
 
 #dy<-dx[!(dx$Year=="2016"),]
 
-ggscatter(dx, x = "sUVa", y = "THg_DOC" , 
+ggscatter(dx, x = "sUVa", y = "THg" , 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.method = "pearson",
-          xlab ="sUva" , ylab ="Hg:DOC")+
+          xlab ="sUva" , ylab ="Hg")+
   facet_grid(.~Position)
 ```
 
@@ -244,7 +244,7 @@ wilcox.test(THg_DOC ~ Position, data=LMW)
 #d <- subset(d, Fraction == "LMW"| Fraction =="HMW")
 head(dx)
 #IMPORTANT!!! Correlation plot for biodeg and parameters
-ggplot(dx, aes(DOC_UiO, THg))+
+ggplot(dx, aes(sUVa, THg))+
   geom_point(aes(shape=(factor(Size)), colour=interaction(Position, Size)),fill="black", size=6)+
   geom_smooth(method = "lm", se = FALSE, colour="black")+
   theme_bw()+
@@ -256,9 +256,10 @@ ggplot(dx, aes(DOC_UiO, THg))+
         plot.title=element_text(size=30, face="bold"),
         legend.text=element_text(size=26),
         legend.title = element_blank())+
-  labs(y = "Hg (ng/L)", x="DOC (mg/L)" )+
-  facet_grid(. ~ factor(Position))+
-  scale_colour_manual(values = c("#0072B2", "#CC79A7", "#bdd4ff", "#e1b0cb"))
+  labs(y = "Hg (ng/L)", x="sUVa254" )+
+    scale_colour_manual(values = c("#0072B2", "#CC79A7", "#bdd4ff", "#e1b0cb"))
+
+#  facet_grid(. ~ factor(Position))+
 
 
 ggplot(dx, aes(sUVa, THg_DOC))+
