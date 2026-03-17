@@ -1388,6 +1388,172 @@ write.csv(sumM, "Month_variability.csv")
 ```
 
 
+#GAM modelling
+```{r transformations}
+#day of year
+#yp
+
+Gdx <- yp %>%
+  arrange(Station, Date) %>%
+  mutate(
+    doy = yday(Date),
+    y = year(Date),
+    t = as.numeric(difftime(Date, min(Date), units = "days")),
+    lnHg = log(THg_m),               # often stabilizes variance; check first
+    lnTOC = log(TOC_m),          # log1p if zeros are possible
+    sUVa_sc = scale(sUVa_m),       # standardize for interpretability
+    Q_sc = scale(Disch),             # if available
+    site = factor(Station)
+  )
+
+```
+
+## GAM 1
+- This model isolates nonlinear effects of TOC and sUVa on Hg, while controlling for seasonality using a cyclic cubic spline on day‑of‑year (bs="cc").
+- Interpretation: If TOC and sUVa have “hidden” effects, the partial smooths s(lnTOC)/s(sUVa_sc) should show structure, even if raw correlations were weak.
+```{r simple GAM}
+
+#library(mgcv)
+
+m1 <- gam(
+  lnHg ~ s(lnTOC, k = 6) +
+         s(sUVa_sc, k = 6) +
+         s(doy, bs = "cc", k = 24),
+  data  = Gdx %>% filter(Station == "Inlet"),  # or outlet, or both (see below)
+  method = "REML", select = TRUE
+)
+
+summary(m1); gam.check(m1, rep = 100)
+```
+Output: 
+The p‑value is significant, so TOC does have a relationship with Hg, but it is:
+
+very weak (edf close to 1),
+nearly linear, and
+not capturing much curvature.
+The effect is likely overridden by seasonal hydrology, consistent with your hypothesis that correlations vary across seasons.
+
+In your system, DOM aromaticity (sUVa) does not explain Hg variation, at least not when aggregated across the year. If you later fit season‑varying models, sUVa may show summer‑specific relationships (but won’t show a global relationship now).
+
+edf ≈ 3.7 means the smooth is moderately nonlinear — more complex than linear, but not very wiggly.
+Highly significant seasonal pattern.
+Hg varies seasonally, with a pattern that takes about 3–4 degrees of freedom to describe (e.g., one or two broad rises/drops across the year).
+This is consistent with:
+
+snowmelt dilution or decoupling,
+summer photochemical Hg transformation,
+autumn mix‑induced release,
+winter stability under ice.
+👉 Seasonality is a major driver of observed Hg variation — more than TOC or sUVa.
+
+
+```{r simple GAM}
+m2 <- gam(
+  lnHg ~ te(lnTOC, doy, bs = c("tp","cc"), k = c(6, 24)) +
+         te(sUVa_sc, doy, bs = c("tp","cc"), k = c(6, 24)) +
+         s(doy, bs = "cc", k = 24),   # optional main seasonal smooth
+  data  = Gdx %>% filter(site == "Inlet"),
+  method = "REML", select = TRUE
+)
+
+summary(m2); gam.check(m2, rep = 100)
+```
+
+The season-dependent TOC–Hg interaction (te(lnTOC, doy)) is statistically significant,
+but the effective degrees of freedom (edf) indicate the effect is extremely weak.
+The sUVa–Hg seasonal interaction is effectively zero.
+Seasonality alone (s(doy)) remains the dominant signal, similar to the simpler model (m1).
+Model explanatory power (adj. R² ≈ 0.42) is basically unchanged from m1 →
+the seasonal interactions did not uncover strong hidden relationships.
+
+```{r}
+Gdx3 <- Gdx %>%
+  mutate(season = case_when(
+    doy %in%  90:180 ~ "spring",     # adjust to local hydrology (snowmelt)
+    doy %in% 181:253 ~ "summer",
+    doy %in% 294:364 ~ "autumn",
+    TRUE             ~ "winter"
+  )) %>%
+  mutate(season = factor(season, levels = c("winter","spring","summer","autumn")))
+
+m3 <- gam(
+  lnHg ~ s(lnTOC, by = season, k = 6) + 
+         s(sUVa_sc, by = season, k = 6) + 
+         s(doy, bs = "cc", k = 24),
+  data  = Gdx3 %>% filter(site == "Inlet"),
+  method = "REML", select = TRUE
+)
+
+summary(m3); gam.check(m3, rep = 100)
+```
+
+```{r}
+
+m4 <- gam(
+  lnHg ~ s(lnTOC, k = 6) +
+         s(sUVa_sc, k = 6) +
+         s(Q_sc, k = 6) +
+         te(lnTOC, Q_sc, k = c(6,6)) +   # optional: TOC–Q interaction
+         s(doy, bs = "cc", k = 24),
+  data  = Gdx %>% filter(site == "Inlet"),
+  method = "REML", select = TRUE
+)
+
+summary(m4); gam.check(m4, rep = 100)
+```
+
+inlet and outlet together and adding long.term year effect
+```{r}
+
+m5 <- gam(
+  lnHg ~ s(lnTOC, by = site, k = 6) +
+         s(sUVa_sc, by = site, k = 6) +
+         s(doy, by = site, bs = "cc", k = 24) +
+         s(site, bs = "re"),
+  data = Gdx,
+  method = "REML", select = TRUE
+)
+summary(m5); gam.check(m5, rep = 100)
+
+
+m5b <- gam(
+  lnHg ~ s(lnTOC, by = site, k = 4) +
+         s(sUVa_sc, by = site, k = 4) +
+         s(doy, by = site, bs = "cc", k = 10) +
+         s(t, k = 6) +             # multi‑year trend (non‑cyclic)
+         s(y, bs = "re"),
+  data = Gdx,
+  method = "REML", select = TRUE
+)
+
+
+m_probe <- gam(
+  lnHg ~ s(lnTOC, k=4) +
+         s(sUVa_sc, k=4) +
+         s(doy, bs="cc", k=10) +        # smaller cyclic k
+         s(site, bs="re") +             # random intercept only
+         s(t, k=6),                     # low-k long-term trend
+  data = Gdx, method = "REML", select = TRUE
+)
+summary(m_probe); gam.check(m_probe, rep = 100)
+
+
+m_final <- bam(
+  lnHg ~ s(Q_sc, k=6) +          # main driver
+         s(lnTOC, k=5) +         # weak, near-linear
+         s(sUVa_sc, k=4) +       # tiny effect (kept for completeness)
+         s(doy, bs="cc", k=12) + # seasonality
+         s(t, k=8) +             # slow trend
+         s(site, bs="re"),       # inlet vs outlet offset
+  data   = Gdx,
+  method = "fREML",
+  discrete = TRUE,
+  rho = 0.4, AR.start = Gdx$block_start
+)
+
+summary(m_final); gam.check(m_final, rep = 100)
+
+```
 
 
 
