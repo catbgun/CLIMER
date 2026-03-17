@@ -1406,18 +1406,17 @@ Gdx <- yp %>%
     site = factor(Station)
   )
 
+library(mgcv)
 ```
 
 ## GAM 1
 - This model isolates nonlinear effects of TOC and sUVa on Hg, while controlling for seasonality using a cyclic cubic spline on day‑of‑year (bs="cc").
 - Interpretation: If TOC and sUVa have “hidden” effects, the partial smooths s(lnTOC)/s(sUVa_sc) should show structure, even if raw correlations were weak.
 ```{r simple GAM}
-
-#library(mgcv)
-
 m1 <- gam(
   lnHg ~ s(lnTOC, k = 6) +
          s(sUVa_sc, k = 6) +
+         s(Q_sc, k = 6) + #added retrospectively
          s(doy, bs = "cc", k = 24),
   data  = Gdx %>% filter(Station == "Inlet"),  # or outlet, or both (see below)
   method = "REML", select = TRUE
@@ -1451,8 +1450,9 @@ winter stability under ice.
 m2 <- gam(
   lnHg ~ te(lnTOC, doy, bs = c("tp","cc"), k = c(6, 24)) +
          te(sUVa_sc, doy, bs = c("tp","cc"), k = c(6, 24)) +
+         te(Q_sc, doy, bs = c("tp","cc"), k = 6) + #added retrospectively
          s(doy, bs = "cc", k = 24),   # optional main seasonal smooth
-  data  = Gdx %>% filter(site == "Inlet"),
+  data  = Gdx %>% filter(site == "Outlet"),
   method = "REML", select = TRUE
 )
 
@@ -1469,9 +1469,9 @@ the seasonal interactions did not uncover strong hidden relationships.
 ```{r}
 Gdx3 <- Gdx %>%
   mutate(season = case_when(
-    doy %in%  90:180 ~ "spring",     # adjust to local hydrology (snowmelt)
-    doy %in% 181:253 ~ "summer",
-    doy %in% 294:364 ~ "autumn",
+    doy %in%  90:151 ~ "spring",     # adjust to local hydrology (snowmelt)
+    doy %in% 152:243 ~ "summer",
+    doy %in% 245:334 ~ "autumn",
     TRUE             ~ "winter"
   )) %>%
   mutate(season = factor(season, levels = c("winter","spring","summer","autumn")))
@@ -1479,14 +1479,34 @@ Gdx3 <- Gdx %>%
 m3 <- gam(
   lnHg ~ s(lnTOC, by = season, k = 6) + 
          s(sUVa_sc, by = season, k = 6) + 
+         s(Q_sc, by=season, k = 6) +
+         #te(lnTOC, Q_sc, by=season, k = c(6,6)) +
          s(doy, bs = "cc", k = 24),
   data  = Gdx3 %>% filter(site == "Inlet"),
   method = "REML", select = TRUE
 )
 
 summary(m3); gam.check(m3, rep = 100)
+
+
+m3Y <- gam(
+  lnHg ~ s(lnTOC, k = 6) + 
+         s(sUVa_sc, k = 6) + 
+         s(Q_sc, k = 6) +
+        #te(lnTOC, Q_sc, k = c(6,6)) +
+        s(t, k = 6) +             # multi‑year trend (non‑cyclic)
+         s(y, bs = "re"),
+         #s(doy, bs = "cc", k = 24),
+  data  = Gdx3 %>% filter(site == "Inlet"),
+  method = "REML", select = TRUE
+)
+
+lnHg ~ season + s(lnTOC, by = season, k = 6) + s(sUVa_sc, by = season, k = 6) + s(doy, bs="cc", k = 24)
+
+summary(m3Y); gam.check(m3Y, rep = 100)
 ```
 
+addin water discharge and combined with toc
 ```{r}
 
 m4 <- gam(
@@ -1495,7 +1515,7 @@ m4 <- gam(
          s(Q_sc, k = 6) +
          te(lnTOC, Q_sc, k = c(6,6)) +   # optional: TOC–Q interaction
          s(doy, bs = "cc", k = 24),
-  data  = Gdx %>% filter(site == "Inlet"),
+  data  = Gdx %>% filter(site == "Outlet"),
   method = "REML", select = TRUE
 )
 
