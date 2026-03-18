@@ -1409,6 +1409,66 @@ Gdx <- yp %>%
 library(mgcv)
 ```
 
+##GAMM
+converting to GAMM with copilot
+```{r}
+
+library(mgcv)
+library(nlme)
+
+m1_gamm <- gamm(
+  lnHg ~ s(lnTOC, k = 6) +
+         s(sUVa_sc, k = 6) +
+         s(Q_sc, k = 6) +
+         s(doy, bs = "cc", k = 14) +
+         s(t, k = 22),
+  data = Gdx %>% filter(Station == "Inlet"),
+  method = "REML",
+  correlation = corAR1(form = ~ t)
+)
+
+summary(m1_gamm$gam)
+
+m2_gamm <- gamm(
+  lnHg ~ s(lnTOC, k = 6) +
+         s(sUVa_sc, k = 6) +
+         s(Q_sc, k = 6) +
+         s(doy, bs = "cc", k = 24) +
+         s(t, k = 8),
+  data = Gdx %>% filter(Station == "Outlet"),
+  method = "REML",
+  correlation = corAR1(form = ~ t)
+)
+
+summary(m2_gamm$gam)
+
+
+# Summary of smooths
+summary(m1_gamm$gam)
+summary(m2_gamm$gam)
+
+# Summary of mixed model (AR1, random effects)
+summary(m1_gamm$lme)
+summary(m2_gamm$lme)
+
+# Nicer plots
+library(gratia)
+draw(m1_gamm$gam)
+draw(m2_gamm$gam)
+
+# Diagnostics
+gam.check(m1_gamm$gam)
+acf(resid(m1_gamm$lme, type = "normalized"))
+plot(m1_gamm$lme)
+
+gam.check(m2_gamm$gam)
+acf(resid(m2_gamm$lme, type = "normalized"))
+plot(m2_gamm$lme)
+
+```
+
+
+
 ## GAM 1
 - This model isolates nonlinear effects of TOC and sUVa on Hg, while controlling for seasonality using a cyclic cubic spline on day‑of‑year (bs="cc").
 - Interpretation: If TOC and sUVa have “hidden” effects, the partial smooths s(lnTOC)/s(sUVa_sc) should show structure, even if raw correlations were weak.
@@ -1417,10 +1477,14 @@ m1 <- gam(
   lnHg ~ s(lnTOC, k = 6) +
          s(sUVa_sc, k = 6) +
          s(Q_sc, k = 6) + #added retrospectively
-         s(doy, bs = "cc", k = 24),
+         s(doy, bs = "cc", k = 24)+
+    s(t, k=8),             # slow trend
   data  = Gdx %>% filter(Station == "Inlet"),  # or outlet, or both (see below)
   method = "REML", select = TRUE
 )
+
+par(mfrow = c(1,3))
+plot(m1, shade = TRUE, pages = 1) 
 
 summary(m1); gam.check(m1, rep = 100)
 ```
@@ -1451,8 +1515,9 @@ m2 <- gam(
   lnHg ~ te(lnTOC, doy, bs = c("tp","cc"), k = c(6, 24)) +
          te(sUVa_sc, doy, bs = c("tp","cc"), k = c(6, 24)) +
          te(Q_sc, doy, bs = c("tp","cc"), k = 6) + #added retrospectively
-         s(doy, bs = "cc", k = 24),   # optional main seasonal smooth
-  data  = Gdx %>% filter(site == "Outlet"),
+         s(doy, bs = "cc", k = 24)+   # optional main seasonal smooth
+        s(t, k=8),             # slow trend
+  data  = Gdx %>% filter(site == "Inlet"),
   method = "REML", select = TRUE
 )
 
@@ -1481,29 +1546,34 @@ m3 <- gam(
          s(sUVa_sc, by = season, k = 6) + 
          s(Q_sc, by=season, k = 6) +
          #te(lnTOC, Q_sc, by=season, k = c(6,6)) +
-         s(doy, bs = "cc", k = 24),
-  data  = Gdx3 %>% filter(site == "Inlet"),
+         s(doy, bs = "cc", k = 24)+
+     s(t, k=8), 
+  data  = Gdx3 %>% filter(site == "Outlet"),
   method = "REML", select = TRUE
 )
 
-summary(m3); gam.check(m3, rep = 100)
+summary(m3); gam.check(m3, rep = 100) #plotting smooths
 
 
-m3Y <- gam(
-  lnHg ~ s(lnTOC, k = 6) + 
-         s(sUVa_sc, k = 6) + 
-         s(Q_sc, k = 6) +
-        #te(lnTOC, Q_sc, k = c(6,6)) +
-        s(t, k = 6) +             # multi‑year trend (non‑cyclic)
-         s(y, bs = "re"),
-         #s(doy, bs = "cc", k = 24),
-  data  = Gdx3 %>% filter(site == "Inlet"),
-  method = "REML", select = TRUE
-)
+par(mfrow = c(1,3))
+plot(m3, shade = TRUE, pages = 1)  # replace mod with your model object
 
-lnHg ~ season + s(lnTOC, by = season, k = 6) + s(sUVa_sc, by = season, k = 6) + s(doy, bs="cc", k = 24)
 
-summary(m3Y); gam.check(m3Y, rep = 100)
+#m3Y <- gam(
+#  lnHg ~ s(lnTOC, k = 6) + 
+#         s(sUVa_sc, k = 6) + 
+#         s(Q_sc, k = 6) +
+#        #te(lnTOC, Q_sc, k = c(6,6)) +
+#        s(t, k = 6) +             # multi‑year trend (non‑cyclic)
+#         s(y, bs = "re"),
+#         #s(doy, bs = "cc", k = 24),
+#  data  = Gdx3 %>% filter(site == "Inlet"),
+#  method = "REML", select = TRUE
+#)
+
+#lnHg ~ season + s(lnTOC, by = season, k = 6) + s(sUVa_sc, by = season, k = 6) + s(doy, #bs="cc", k = 24)
+
+#summary(m3Y); gam.check(m3Y, rep = 100)
 ```
 
 addin water discharge and combined with toc
@@ -1515,7 +1585,7 @@ m4 <- gam(
          s(Q_sc, k = 6) +
          te(lnTOC, Q_sc, k = c(6,6)) +   # optional: TOC–Q interaction
          s(doy, bs = "cc", k = 24),
-  data  = Gdx %>% filter(site == "Outlet"),
+  data  = Gdx %>% filter(site == "Inlet"),
   method = "REML", select = TRUE
 )
 
@@ -1528,7 +1598,7 @@ inlet and outlet together and adding long.term year effect
 m5 <- gam(
   lnHg ~ s(lnTOC, by = site, k = 6) +
          s(sUVa_sc, by = site, k = 6) +
-         s(doy, by = site, bs = "cc", k = 24) +
+         s(doy, by = site, bs = "cc", k = 24)+ 
          s(site, bs = "re"),
   data = Gdx,
   method = "REML", select = TRUE
