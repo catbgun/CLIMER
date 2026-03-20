@@ -87,6 +87,137 @@ dx$THGTOC_m2 = dx$THg_m/dx$TOC_m
 dx$THGDOC_s2 = dx$THg_s/dx$DOC_s
 ```
 
+Using GAMM to look for significant difference between inlet and outlet
+```{r inlet versus outlet}
+library(mgcv)   # gam/gamm/bam
+library(nlme)   # correlation structures used by gamm()
+library(gratia) # nicer plots/diagnostics for mgcv
+
+#remove NAs from student entries
+dxc <- dx[!is.na(dx$THGTOC_m2), ]
+
+dx_G <- dxc %>%
+  mutate(
+    Site = droplevels(factor(Station, levels = c("Inlet","Outlet"))),
+    Date = as.Date(Date),
+    doy  = yday(Date),                     # 1..365
+    t    = as.numeric(Date - min(Date))    # days since start (continuous)
+  ) %>%
+  arrange(Station, Date)
+
+# QA: are the sites different on average?
+ctrl <- nlme::lmeControl(niterEM = 60, msMaxIter = 200, maxIter = 100,
+                         opt = "optim", msVerbose = FALSE)
+mA1 <- gamm(
+  TOC_m ~ Station + s(doy, bs = "cc", k = 24),
+  data = dx_G,
+  method = "REML",
+  #control = ctrl, #supposed to help, common for environmental data. Does not seem to make a difference
+  correlation = nlme::corCAR1(form = ~ t | Station)  # <-- grouping added
+)
+
+#The coefficient for SiteOutlet tests whether the Outlet mean differs from Inlet after accounting for seasonality and autocorrelation.
+# QB: Is one site consistently greater across the year?”
+mA2 <- gamm(
+  TOC_m ~ Station + s(doy, bs = "cc", k = 24) + s(t, k = 10, bs = "cs"),
+  data = dx_G,
+  method = "REML",
+  correlation = nlme::corCAR1(form = ~ t | Station),  # <-- grouping added
+  #control = ctrl
+)
+summary(mA2$gam)
+
+#Site coefficient now answers: consistently higher/lower, averaged over the period, after season and long‑term trend are removed.
+
+#QC: Do the temporal patterns differ between sites?
+
+mB1 <- gamm(
+  TOC_m ~ Site + s(doy, bs = "cc", k = 24, by = Site)+ s(t, k = 10, bs = "cs"),
+  data = dx_G,
+  method = "REML",
+  correlation = nlme::corCAR1(form = ~ t | Site),  # <-- grouping added
+  #control = ctrl
+)
+summary(mB1$gam)
+
+#site specific short and long term time trends. USE THIS?!
+mB2 <- gamm(
+  THGTOC_m2 ~ Site +
+        s(doy, bs = "cc", k = 24, by = Site) +
+        s(t,   k = 10, bs = "cs", by = Site),
+  data = dx_G,
+  method = "REML",
+  correlation = nlme::corCAR1(form = ~ t| Site),
+  #control = ctrl
+)
+summary(mB2$gam)
+
+
+#If the s(doy, by=Site) smooths are significantly different (or clearly different when plotted), inlet and outlet do not share the same seasonal cycle.
+
+#DIAGNOSTICS
+# Smooths (publication-quality)
+draw(mB2$gam)             # or draw(mB1$gam), draw(mB2$gam)
+
+# Residual autocorrelation (should be ~white noise)
+acf(resid(mB2$lme, type = "normalized"), lag.max = 24)
+
+# Residual checks (normality, heteroscedasticity, fitted vs residuals)
+plot(mB2$lme)
+
+# Basis dimension tests (interpret cautiously for gamm)
+gam.check(mB2$gam)
+
+# Optional: Compare models
+#AIC(mA1$lme, mA2$lme, mB1$lme, mB2$lme)
+
+
+
+
+```
+
+##GAMM
+converting to GAMM with copilot
+```{r}
+#library(nlme)
+m1_gamm_inl <- gamm(
+  lnHg ~ s(lnTOC, k = 6, bs = "cs") +
+         s(sUVa_sc, k = 6, bs = "cs") +
+         s(Q_sc, k = 6, bs = "cs") +
+         #ti(lnTOC, sUVa_sc, k=c(5,5))+
+         s(doy, bs = "cs", k = 24) +
+         s(t, k = 12, bs = "cs"),
+  data = dx,
+  method = "REML",
+  correlation = nlme::corCAR1(form = ~ t)
+  #correlation = corAR1(form = ~ t)
+)
+
+# 1) Smooths & significance
+summary(m1_gamm_inl$gam)
+plot(m1_gamm_inl$gam, pages = 1, shade = TRUE)
+
+# 2)  Residuals vs Fitted
+plot(m1_gamm_inl$lme)
+
+# 3) Normality of Residuals
+gam.check(m1_gamm_inl$gam)
+
+# 4) Residual versus time
+plot(resid(m1_gamm_inl$lme), type="l")
+
+# 5 Autocorrelation Check (ACF of residuals). Residual correlation
+acf(resid(m1_gamm_inl$lme, type = "normalized"), lag.max = 24)
+
+# 6) Concurvity
+concurvity(m1_gamm_inl$gam, full = TRUE)
+
+# Summary of mixed model (AR1, random effects)
+summary(m1_gamm_inl$lme)
+
+```
+
+
 Alt2 plot seasonal data
 ```{r}
 #TOC
@@ -551,6 +682,7 @@ head(dis_long)
 head(dx_ts)
 
 yp <- left_join(dx_ts, dis_long, by = c("Station", "Date"))
+yp$Year=format(as.Date(yp$Date, format="%d.%m.%Y"),"%Y")
 
 ```
 
@@ -1312,10 +1444,7 @@ birthstimeseriescomponents <- decompose(TOC_m_ts)
 
 ```
 
-
-
 ## Sumamry table
-
 ```{r create summary table}
 library(dplyr)
 library(rbind)
@@ -1388,12 +1517,22 @@ write.csv(sumM, "Month_variability.csv")
 ```
 
 
-#GAM modelling
+#GAMM modelling
 ```{r transformations}
-#day of year
-#yp
+Gdx_inl <-Gdx %>% filter(Station == "Inlet") %>%
+  arrange(Station, Date) %>%
+  mutate(
+    doy = yday(Date),
+    y = year(Date),
+    t = as.numeric(difftime(Date, min(Date), units = "days")),
+    lnHg = log(THg_m),               # often stabilizes variance; check first
+    lnTOC = log(TOC_m),          # log1p if zeros are possible
+    sUVa_sc = scale(sUVa_m),       # standardize for interpretability
+    Q_sc = scale(Disch),             # if available
+    site = factor(Station)
+  )
 
-Gdx <- yp %>%
+Gdx_out <-Gdx %>% filter(Station == "Outlet") %>%
   arrange(Station, Date) %>%
   mutate(
     doy = yday(Date),
@@ -1412,61 +1551,144 @@ library(mgcv)
 ##GAMM
 converting to GAMM with copilot
 ```{r}
-
-library(mgcv)
-library(nlme)
-
-m1_gamm <- gamm(
-  lnHg ~ s(lnTOC, k = 6) +
-         s(sUVa_sc, k = 6) +
-         s(Q_sc, k = 6) +
-         s(doy, bs = "cc", k = 14) +
-         s(t, k = 22),
-  data = Gdx %>% filter(Station == "Inlet"),
+#library(nlme)
+m1_gamm_inl <- gamm(
+  lnHg ~ s(lnTOC, k = 6, bs = "cs") +
+         s(sUVa_sc, k = 6, bs = "cs") +
+         s(Q_sc, k = 6, bs = "cs") +
+         #ti(lnTOC, sUVa_sc, k=c(5,5))+
+         s(doy, bs = "cs", k = 24) +
+         s(t, k = 12, bs = "cs"),
+  data = Gdx_inl,
   method = "REML",
-  correlation = corAR1(form = ~ t)
+  correlation = nlme::corCAR1(form = ~ t)
+  #correlation = corAR1(form = ~ t)
 )
 
-summary(m1_gamm$gam)
+# 1) Smooths & significance
+summary(m1_gamm_inl$gam)
+plot(m1_gamm_inl$gam, pages = 1, shade = TRUE)
 
-m2_gamm <- gamm(
-  lnHg ~ s(lnTOC, k = 6) +
-         s(sUVa_sc, k = 6) +
-         s(Q_sc, k = 6) +
-         s(doy, bs = "cc", k = 24) +
-         s(t, k = 8),
-  data = Gdx %>% filter(Station == "Outlet"),
-  method = "REML",
-  correlation = corAR1(form = ~ t)
-)
+# 2)  Residuals vs Fitted
+plot(m1_gamm_inl$lme)
 
-summary(m2_gamm$gam)
+# 3) Normality of Residuals
+gam.check(m1_gamm_inl$gam)
 
+# 4) Residual versus time
+plot(resid(m1_gamm_inl$lme), type="l")
 
-# Summary of smooths
-summary(m1_gamm$gam)
-summary(m2_gamm$gam)
+# 5 Autocorrelation Check (ACF of residuals). Residual correlation
+acf(resid(m1_gamm_inl$lme, type = "normalized"), lag.max = 24)
+
+# 6) Concurvity
+concurvity(m1_gamm_inl$gam, full = TRUE)
 
 # Summary of mixed model (AR1, random effects)
-summary(m1_gamm$lme)
-summary(m2_gamm$lme)
+summary(m1_gamm_inl$lme)
+
+
+#OUTLET
+m1_gamm_out <- gamm(
+        lnHg ~ s(lnTOC, k = 6, bs = "cs") +
+         s(sUVa_sc, k = 6, bs = "cs") +
+         s(Q_sc, k = 6, bs = "cs") +
+         s(doy, bs = "cs", k = 24) +
+         s(t, k = 12, bs = "cs"),
+  data = Gdx_out,
+  method = "REML",
+  correlation = nlme::corCAR1(form = ~ t)
+  #correlation = corAR1(form = ~ t)
+)
+
+# Smooths & significance
+summary(m1_gamm_out$gam)
+plot(m1_gamm_inl$gam, pages = 1, shade = TRUE)
+plot(m1_gamm_inl$lme)
+plot(m1_gamm_out$lme)
+
+# Residual correlation
+acf(resid(m1_gamm_inl$lme, type = "normalized"), lag.max = 24)
+
+# Basis checks (interpret cautiously for `gamm`)
+gam.check(m1_gamm_out$gam)
+
+# Concurvity
+concurvity(m1_gamm_inl$gam, full = TRUE)
+
+# Summary of mixed model (AR1, random effects)
+summary(m1_gamm_inl$lme)
+
 
 # Nicer plots
-library(gratia)
-draw(m1_gamm$gam)
-draw(m2_gamm$gam)
-
-# Diagnostics
-gam.check(m1_gamm$gam)
-acf(resid(m1_gamm$lme, type = "normalized"))
-plot(m1_gamm$lme)
-
-gam.check(m2_gamm$gam)
-acf(resid(m2_gamm$lme, type = "normalized"))
-plot(m2_gamm$lme)
+#library(gratia)
+draw(m1_gamm_inl$gam)
+draw(m1_gamm_out$gam)
 
 ```
 
+Seasonality
+-  If you want shrinkage/automatic removal of weak smooths, use a shrinkage basis (bs="cs"
+```{r}
+Gdx3_inl <- Gdx_inl %>%
+  mutate(season = case_when(
+    doy %in%  90:151 ~ "spring",     # adjust to local hydrology (snowmelt)
+    doy %in% 152:243 ~ "summer",
+    doy %in% 245:334 ~ "autumn",
+    TRUE             ~ "winter"
+  )) %>%
+  mutate(season = factor(season, levels = c("winter","spring","summer","autumn")))
+
+Gdx3_out <- Gdx_out %>%
+  mutate(season = case_when(
+    doy %in%  90:151 ~ "spring",     # adjust to local hydrology (snowmelt)
+    doy %in% 152:243 ~ "summer",
+    doy %in% 245:334 ~ "autumn",
+    TRUE             ~ "winter"
+  )) %>%
+  mutate(season = factor(season, levels = c("winter","spring","summer","autumn")))
+
+#library(mgcv)
+library(nlme)
+
+m2_gamm_inl <- gamm(
+  lnHg ~ season +                                  # gives each season its Hg-intercepts
+         s(lnTOC,  by = season, k = 6, bs = "cs") +# shrinkage basis instead of select=TRUE
+         s(sUVa_sc,by = season, k = 6, bs = "cs") + #cs= shrinkage cubic regression spline basis.
+         s(Q_sc,   by = season, k = 6, bs = "cs") +  
+         s(doy, bs = "cc", k = 20)+ #k = 24 is common for seasonal signal; Cyclic cubic spline.
+         s(t, k = 10, bs = "cs"), #why cs here? It helps for autocorrelation. But if you are certain a trend exists and don’t want it to vanish, you can switch to bs="cr" (no shrinkage), but keep REML.
+  data = Gdx3_inl,
+  method = "REML",
+  correlation = nlme::corCAR1(form = ~ t)) # distance-based (continuous-time) AR(1)
+
+# Smooths & significance
+summary(m2_gamm_inl$gam)
+
+
+m2_gamm_out <- gamm(
+  lnHg ~ season +                                  # gives each season its Hg-intercepts
+         s(lnTOC,  by = season, k = 6, bs = "cs") +# shrinkage basis instead of select=TRUE
+         s(sUVa_sc,by = season, k = 6, bs = "cs")+ #cs= shrinkage cubic regression spline basis.
+         s(Q_sc,   by = season, k = 6, bs = "cs")+
+         s(doy, bs = "cc", k = 20)+ #k = 24 is common for seasonal signal; Cyclic cubic spline.
+         s(t, k = 8, bs = "cs"), #why cs here? It helps for autocorrelation. But if you are certain a trend exists and don’t want it to vanish, you can switch to bs="cr" (no shrinkage), but keep REML.
+  data = Gdx3_out,
+  method = "REML",
+  correlation = nlme::corCAR1(form = ~ t))  # distance-based (continuous-time) AR(1)
+  #correlation = corAR1(form = ~ t)  # AR(1) over time index t. Accounts for lag‑1 residual autocorrelation typical in weekly–monthly series
+
+# Smooths & significance
+summary(m2_gamm_out$gam)
+
+
+# Nicer plots
+#library(gratia)
+draw(m2_gamm_inl$gam)
+draw(m2_gamm_out$gam)
+
+
+```
 
 
 ## GAM 1
@@ -1545,7 +1767,6 @@ m3 <- gam(
   lnHg ~ s(lnTOC, by = season, k = 6) + 
          s(sUVa_sc, by = season, k = 6) + 
          s(Q_sc, by=season, k = 6) +
-         #te(lnTOC, Q_sc, by=season, k = c(6,6)) +
          s(doy, bs = "cc", k = 24)+
      s(t, k=8), 
   data  = Gdx3 %>% filter(site == "Outlet"),
