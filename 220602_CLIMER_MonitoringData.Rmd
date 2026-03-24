@@ -6,19 +6,12 @@ output: html_document
 editor_options: 
   chunk_output_type: console
 ---
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
 The following file can not be found. 
-```{r}
-#setwd("//niva-of5/osl-userdata$/CBG/Documents/R/Projects/CLIMER TFF/CLIMER TFF")
-#dx <- read.table("TOC_Hg_Abs_Inlet__Hyp_outlet_2016_2019_2.txt", sep = "\t", header = TRUE)
-#found errors in the abs data at 365 nm. May also be errors at other wavelengths, for the inlet. Outlet seems ok and 254 nm ok
-#dx <- read.table("TOC_Hg_Abs_Inlet__Hyp_outlet_2016_2019_3.txt", sep = "\t", header = TRUE)
-
+```{r load data}
 dx_o <- read.table("TOC_Hg_Abs_Inlet__Hyp_outlet_2016_2019_4.txt", sep = "\t", header = TRUE)
 
 library(plyr)
@@ -30,7 +23,7 @@ dx_o$Station <- revalue(dx_o$Station, c("Langtjern, utl??p" = "Outlet","Innl??ps
 library(ggplot2)
 library(magrittr)
 #library(plyr)
-library(dplyr)
+#library(dplyr)
 library(scales)
 library(lubridate)
 library(anytime) 
@@ -41,6 +34,40 @@ library(rstatix)
 library(Hmisc)
 library("PerformanceAnalytics")
 library(tidyverse)
+```
+
+Extra
+```{r}
+#mA1 <- gamm(
+#  TOC_m ~ Station + s(doy, bs = "cc", k = 24),
+#  data = dx_G,
+#  method = "REML",
+#  #control = ctrl, #supposed to help, common for environmental data. Does not seem to make a difference
+#  correlation = nlme::corCAR1(form = ~ t | Station)  # <-- grouping added
+#)
+
+#The coefficient for SiteOutlet tests whether the Outlet mean differs from Inlet after accounting for seasonality and autocorrelation.
+# QB: Is one site consistently greater across the year?”
+#mA2 <- gamm(
+#  TOC_m ~ Station + s(doy, bs = "cc", k = 24) + s(t, k = 10, bs = "cs"),
+#  data = dx_G,
+#  method = "REML",
+#  correlation = nlme::corCAR1(form = ~ t | Station),  # <-- grouping added
+#  #control = ctrl
+#)
+#summary(mA1$gam)
+
+#Site coefficient now answers: consistently higher/lower, averaged over the period, after season and long‑term trend are removed.
+#QC: Do the temporal patterns differ between sites?
+
+#mB1 <- gamm(
+#  TOC_m ~ Site + s(doy, bs = "cc", k = 24, by = Site)+ s(t, k = 10, bs = "cs"),
+#  data = dx_G,
+#  method = "REML",
+#  correlation = nlme::corCAR1(form = ~ t | Site),  # <-- grouping added
+#  #control = ctrl
+#)
+#summary(mB1$gam)
 ```
 
 Adding extended abs-data
@@ -61,7 +88,6 @@ dx_o$Date <- as.Date(dx_o$Date,format = "%d.%m.%Y")
 dxx <- left_join(dx_o, abs_wide, by = c("Station.ID", "Date"))
 
 dxx$Date <- as.Date(dxx$Date,format = "%d.%m.%Y")
-
 dxx$Year=format(as.Date(dxx$Date, format="%d.%m.%Y"),"%Y")
 dxx$month_day=format(as.Date(dxx$Date, format="%d.%m"),"%d.%m")
 dxx$month_day <- format(as.Date(dxx$Date, format="%d.%m"),"%d.%m")
@@ -78,7 +104,7 @@ outlet <- subset(dx,  Station =="Outlet")
 inlet <- subset(dx,  Station =="Inlet")
 
 #library(pastecs)
-stat.desc(outlet)
+#stat.desc(outlet)
 
 dx$sUVa_m = (dx$"254"/dx$TOC_m)*100 #with new abs data from Areti
 dx$sUVa_s = (dx$X254nm_s/dx$DOC_s)*100
@@ -93,67 +119,114 @@ library(mgcv)   # gam/gamm/bam
 library(nlme)   # correlation structures used by gamm()
 library(gratia) # nicer plots/diagnostics for mgcv
 
-#remove NAs from student entries
-dxc <- dx[!is.na(dx$THGTOC_m2), ]
+# 1) TOC
+dxTOC <- dx[!is.na(dx$TOC_m), ]
+# Add seasonality and numeric time - THIS IS THE ONE!!!!!!!!!!!
+dxTOC <- dxTOC[order(dxTOC$Date), ]
+dxTOC$doy <- yday(dxTOC$Date)          # day of year for seasonal smooth
+dxTOC$time_num <- as.numeric(dxTOC$Date) / (60*60*24)  # days since epoch
+dxTOC$lnTOC <- log(dxTOC$TOC_m)
 
-dx_G <- dxc %>%
-  mutate(
-    Site = droplevels(factor(Station, levels = c("Inlet","Outlet"))),
-    Date = as.Date(Date),
-    doy  = yday(Date),                     # 1..365
-    t    = as.numeric(Date - min(Date))    # days since start (continuous)
-  ) %>%
-  arrange(Station, Date)
-
-# QA: are the sites different on average?
-ctrl <- nlme::lmeControl(niterEM = 60, msMaxIter = 200, maxIter = 100,
-                         opt = "optim", msVerbose = FALSE)
-mA1 <- gamm(
-  TOC_m ~ Station + s(doy, bs = "cc", k = 24),
-  data = dx_G,
-  method = "REML",
-  #control = ctrl, #supposed to help, common for environmental data. Does not seem to make a difference
-  correlation = nlme::corCAR1(form = ~ t | Station)  # <-- grouping added
+m1 <- gamm(
+  lnTOC ~ Station +
+    s(time_num, k = 40) +            # long-term nonlinear trend
+    s(doy, bs = "cc", k = 30),       # seasonal cycle, cyclic smooth
+  random = list(Date = ~1),
+  correlation = corAR1(form = ~ time_num| Station),
+  data = dxTOC
 )
 
-#The coefficient for SiteOutlet tests whether the Outlet mean differs from Inlet after accounting for seasonality and autocorrelation.
-# QB: Is one site consistently greater across the year?”
-mA2 <- gamm(
-  TOC_m ~ Station + s(doy, bs = "cc", k = 24) + s(t, k = 10, bs = "cs"),
-  data = dx_G,
-  method = "REML",
-  correlation = nlme::corCAR1(form = ~ t | Station),  # <-- grouping added
-  #control = ctrl
+summary(m1$gam)
+gam.check(m1$gam)
+summary(m1$lme)
+acf(resid(m1$lme, type = "normalized"), lag.max = 24)
+
+anova(m1$lme)
+
+# 2) sUVa
+dxsUVa <- dx[!is.na(dx$sUVa_m), ]
+
+# Add seasonality and numeric time - THIS IS THE ONE!!!!!!!!!!!
+dxsUVa <- dxsUVa[order(dxsUVa$Date), ]
+dxsUVa$doy <- yday(dxsUVa$Date)          # day of year for seasonal smooth
+dxsUVa$time_num <- as.numeric(dxsUVa$Date) / (60*60*24)  # days since epoch
+dxsUVa$lnsUVa <- log(dxsUVa$sUVa_m)
+
+m2 <- gamm(
+  lnsUVa ~ Station +
+    s(time_num, k = 40) +            # long-term nonlinear trend
+    s(doy, bs = "cc", k = 30),       # seasonal cycle, cyclic smooth
+  random = list(Date = ~1),
+  correlation = corAR1(form = ~ time_num| Station),
+  data = dxsUVa
 )
-summary(mA2$gam)
 
-#Site coefficient now answers: consistently higher/lower, averaged over the period, after season and long‑term trend are removed.
+summary(m2$gam)
+gam.check(m2$gam)
+summary(m2$lme)
+anova(m2$lme)
 
-#QC: Do the temporal patterns differ between sites?
+# 3) Hg
+dxHg <- dx[!is.na(dx$THg_m), ]
 
-mB1 <- gamm(
-  TOC_m ~ Site + s(doy, bs = "cc", k = 24, by = Site)+ s(t, k = 10, bs = "cs"),
-  data = dx_G,
-  method = "REML",
-  correlation = nlme::corCAR1(form = ~ t | Site),  # <-- grouping added
-  #control = ctrl
+# Add seasonality and numeric time - THIS IS THE ONE!!!!!!!!!!!
+dxHg <- dxHg[order(dxHg$Date), ]
+dxHg$doy <- yday(dxHg$Date)          # day of year for seasonal smooth
+dxHg$time_num <- as.numeric(dxHg$Date) / (60*60*24)  # days since epoch
+dxHg$lnHg <- log(dxHg$THg_m)
+
+m3 <- gamm(
+  lnHg ~ Station +
+    s(time_num, k = 40) +            # long-term nonlinear trend
+    s(doy, bs = "cc", k = 30),       # seasonal cycle, cyclic smooth
+  random = list(Date = ~1),
+  correlation = corAR1(form = ~ time_num| Station),
+  data = dxHg
 )
-summary(mB1$gam)
 
-#site specific short and long term time trends. USE THIS?!
-mB2 <- gamm(
-  THGTOC_m2 ~ Site +
-        s(doy, bs = "cc", k = 24, by = Site) +
-        s(t,   k = 10, bs = "cs", by = Site),
-  data = dx_G,
-  method = "REML",
-  correlation = nlme::corCAR1(form = ~ t| Site),
-  #control = ctrl
+summary(m3$gam)
+gam.check(m3$gam)
+summary(m3$lme)
+
+anova(m3$lme)
+
+# 4) Hg:DOC
+dxHgDOC <- dx[!is.na(dx$THGTOC_m2), ]
+
+# Add seasonality and numeric time - THIS IS THE ONE!!!!!!!!!!!
+dxHgDOC <- dxHgDOC[order(dxHgDOC$Date), ]
+dxHgDOC$doy <- yday(dxHgDOC$Date)          # day of year for seasonal smooth
+dxHgDOC$time_num <- as.numeric(dxHgDOC$Date) / (60*60*24)  # days since epoch
+dxHgDOC$lnHgDOC <- log(dxHgDOC$THg_m)
+
+m4 <- gamm(
+  lnHgDOC ~ Station +
+    s(time_num, k = 40) +            # long-term nonlinear trend
+    s(doy, bs = "cc", k = 30),       # seasonal cycle, cyclic smooth
+  random = list(Date = ~1),
+  correlation = corAR1(form = ~ time_num| Station),
+  data = dxHgDOC
 )
-summary(mB2$gam)
+
+summary(m4$gam)
+gam.check(m4$gam)
+summary(m4$lme)
+anova(m4$lme)
 
 
-#If the s(doy, by=Site) smooths are significantly different (or clearly different when plotted), inlet and outlet do not share the same seasonal cycle.
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #DIAGNOSTICS
 # Smooths (publication-quality)
@@ -170,29 +243,112 @@ gam.check(mB2$gam)
 
 # Optional: Compare models
 #AIC(mA1$lme, mA2$lme, mB1$lme, mB2$lme)
-
-
-
-
 ```
 
-##GAMM
-converting to GAMM with copilot
 ```{r}
-#library(nlme)
-m1_gamm_inl <- gamm(
-  lnHg ~ s(lnTOC, k = 6, bs = "cs") +
-         s(sUVa_sc, k = 6, bs = "cs") +
-         s(Q_sc, k = 6, bs = "cs") +
-         #ti(lnTOC, sUVa_sc, k=c(5,5))+
-         s(doy, bs = "cs", k = 24) +
-         s(t, k = 12, bs = "cs"),
-  data = dx,
+#extra old
+
+#1) TOC
+#remove NAs from student entries
+dxc1 <- dx_G[!is.na(dx_G$TOC_m), ]
+
+# QA: are the sites different on average?
+ctrl <- nlme::lmeControl(niterEM = 60, msMaxIter = 200, maxIter = 100,
+                         opt = "optim", msVerbose = FALSE)
+
+#site specific short and long term time trends. USE THIS!
+mB2 <- gamm(
+  lnTOC ~ Site +
+        s(doy, bs = "cc", k = 24, by = Site) +
+        s(t,   k = 10, bs = "cs", by = Site),
+  data = GdxYY,
   method = "REML",
-  correlation = nlme::corCAR1(form = ~ t)
-  #correlation = corAR1(form = ~ t)
+  correlation = nlme::corCAR1(form = ~ t| Site),
+  control = ctrl
+)
+summary(mB2$gam)
+gam.check(mB2$gam)
+acf(resid(mB2$lme, type = "normalized"), lag.max = 24)
+
+
+# 2) sUVa
+#remove NAs from student entries
+dxc1 <- dx[!is.na(dx$sUVa_m), ]
+
+dx_G1 <- dxc1 %>%
+  mutate(
+    Site = droplevels(factor(Station, levels = c("Inlet","Outlet"))),
+    Date = as.Date(Date),
+    doy  = yday(Date),                     # 1..365
+    t    = as.numeric(Date - min(Date))    # days since start (continuous)
+  ) %>%
+  arrange(Station, Date)
+
+#site specific short and long term time trends. USE THIS!
+mB2 <- gamm(
+  TOC_m ~ Site +
+        s(doy, bs = "cc", k = 24, by = Site) +
+        s(t,   k = 10, bs = "cs", by = Site),
+  data = dx_G,
+  method = "REML",
+  correlation = nlme::corCAR1(form = ~ t| Site),
+  #control = ctrl
+)
+summary(mB2$gam)
+gam.check(mB2$gam)
+
+
+#If the s(doy, by=Site) smooths are significantly different (or clearly different when plotted), inlet and outlet do not share the same seasonal cycle.
+
+dxTOC_ <-dxTOC  %>%
+  arrange(Station, Date) %>%
+  mutate(
+    doy = yday(Date),
+    y = year(Date),
+    t = as.numeric(difftime(Date, min(Date), units = "days")),
+    lnHg = log(THg_m),               # often stabilizes variance; check first
+    lnTOC = log(TOC_m),          # log1p if zeros are possible
+    sUVa_sc = scale(sUVa_m),       # standardize for interpretability
+    site = factor(Station)
+  )
+
+
+m_simple <- gamm(
+  lnTOC ~ Station + s(doy, bs="cc", k=24), #+ s(t, bs="cs", k=10),
+  data = dxTOC_,
+  correlation = corCAR1(form = ~ t|Station),
+  method = "REML"
+)
+summary(m_simple$gam)
+
+gam.check(m_simple$gam)
+
+acf(resid(m_simple$lme, type = "normalized"), lag.max = 24)
+
+mB2 <- gamm(
+  lnTOC ~ Station +
+        s(doy, bs = "cc", k = 24, by = Station) +
+        s(t,   k = 10, bs = "cs", by = Station),
+  data = dxTOC_,
+  method = "REML",
+  correlation = nlme::corCAR1(form = ~ t| Station)
+  #control = ctrl
 )
 
+
+dx_G1 <- dxc1 %>%
+  mutate(
+    Site = droplevels(factor(Station, levels = c("Inlet","Outlet"))),
+    Date = as.Date(Date),
+    doy  = yday(Date),                     # 1..365
+    t    = as.numeric(Date - min(Date))    # days since start (continuous)
+  ) %>%
+  arrange(Station, Date)
+```
+
+
+##GAMM diagbnostics
+```{r}
 # 1) Smooths & significance
 summary(m1_gamm_inl$gam)
 plot(m1_gamm_inl$gam, pages = 1, shade = TRUE)
@@ -313,7 +469,6 @@ ggsave(filename = "output/sUVa_m.png",
        plot = sUVa,
        width = 11, height = 7, units = "in")
 ```
-
 
 ```{r Monitoing inlet and outlet months}
 ggplot(subset(dx, Year %in% c(2016, 2017, 2018, 2019, 2020, 2021)))+
@@ -1504,22 +1659,18 @@ sumY <- dx_sum %>%
   summarise(across(.cols  = where(is.numeric), .f = list(mean = mean, sd = sd), na.rm = TRUE))
 #inter - for year month, what is the variabilitY?
 
-
-
 sumM <- dx_sum %>% 
   group_by(Station, month) %>% 
   summarise(across(.cols  = where(is.numeric), .f = list(mean = mean, sd = sd), na.rm = TRUE))
 
-
 write.csv(sumY, "Year_variability.csv")
 write.csv(sumM, "Month_variability.csv")
-
 ```
 
 
 #GAMM modelling
 ```{r transformations}
-Gdx_inl <-Gdx %>% filter(Station == "Inlet") %>%
+Gdx_inl <-yp %>% filter(Station == "Inlet") %>%
   arrange(Station, Date) %>%
   mutate(
     doy = yday(Date),
@@ -1548,7 +1699,7 @@ Gdx_out <-Gdx %>% filter(Station == "Outlet") %>%
 library(mgcv)
 ```
 
-##GAMM
+##GAMM - WITH DISCHARGE MANUSCRIPT
 converting to GAMM with copilot
 ```{r}
 #library(nlme)
@@ -1557,7 +1708,7 @@ m1_gamm_inl <- gamm(
          s(sUVa_sc, k = 6, bs = "cs") +
          s(Q_sc, k = 6, bs = "cs") +
          #ti(lnTOC, sUVa_sc, k=c(5,5))+
-         s(doy, bs = "cs", k = 24) +
+         s(doy, bs = "cc", k = 24) +
          s(t, k = 12, bs = "cs"),
   data = Gdx_inl,
   method = "REML",
@@ -1664,6 +1815,7 @@ m2_gamm_inl <- gamm(
 
 # Smooths & significance
 summary(m2_gamm_inl$gam)
+gam.check(m2_gamm_inl$gam)
 
 
 m2_gamm_out <- gamm(
@@ -1680,189 +1832,15 @@ m2_gamm_out <- gamm(
 
 # Smooths & significance
 summary(m2_gamm_out$gam)
+gam.check(m2_gamm_out$gam)
 
 
-# Nicer plots
+
+1# Nicer plots
 #library(gratia)
 draw(m2_gamm_inl$gam)
 draw(m2_gamm_out$gam)
 
-
-```
-
-
-## GAM 1
-- This model isolates nonlinear effects of TOC and sUVa on Hg, while controlling for seasonality using a cyclic cubic spline on day‑of‑year (bs="cc").
-- Interpretation: If TOC and sUVa have “hidden” effects, the partial smooths s(lnTOC)/s(sUVa_sc) should show structure, even if raw correlations were weak.
-```{r simple GAM}
-m1 <- gam(
-  lnHg ~ s(lnTOC, k = 6) +
-         s(sUVa_sc, k = 6) +
-         s(Q_sc, k = 6) + #added retrospectively
-         s(doy, bs = "cc", k = 24)+
-    s(t, k=8),             # slow trend
-  data  = Gdx %>% filter(Station == "Inlet"),  # or outlet, or both (see below)
-  method = "REML", select = TRUE
-)
-
-par(mfrow = c(1,3))
-plot(m1, shade = TRUE, pages = 1) 
-
-summary(m1); gam.check(m1, rep = 100)
-```
-Output: 
-The p‑value is significant, so TOC does have a relationship with Hg, but it is:
-
-very weak (edf close to 1),
-nearly linear, and
-not capturing much curvature.
-The effect is likely overridden by seasonal hydrology, consistent with your hypothesis that correlations vary across seasons.
-
-In your system, DOM aromaticity (sUVa) does not explain Hg variation, at least not when aggregated across the year. If you later fit season‑varying models, sUVa may show summer‑specific relationships (but won’t show a global relationship now).
-
-edf ≈ 3.7 means the smooth is moderately nonlinear — more complex than linear, but not very wiggly.
-Highly significant seasonal pattern.
-Hg varies seasonally, with a pattern that takes about 3–4 degrees of freedom to describe (e.g., one or two broad rises/drops across the year).
-This is consistent with:
-
-snowmelt dilution or decoupling,
-summer photochemical Hg transformation,
-autumn mix‑induced release,
-winter stability under ice.
-👉 Seasonality is a major driver of observed Hg variation — more than TOC or sUVa.
-
-
-```{r simple GAM}
-m2 <- gam(
-  lnHg ~ te(lnTOC, doy, bs = c("tp","cc"), k = c(6, 24)) +
-         te(sUVa_sc, doy, bs = c("tp","cc"), k = c(6, 24)) +
-         te(Q_sc, doy, bs = c("tp","cc"), k = 6) + #added retrospectively
-         s(doy, bs = "cc", k = 24)+   # optional main seasonal smooth
-        s(t, k=8),             # slow trend
-  data  = Gdx %>% filter(site == "Inlet"),
-  method = "REML", select = TRUE
-)
-
-summary(m2); gam.check(m2, rep = 100)
-```
-
-The season-dependent TOC–Hg interaction (te(lnTOC, doy)) is statistically significant,
-but the effective degrees of freedom (edf) indicate the effect is extremely weak.
-The sUVa–Hg seasonal interaction is effectively zero.
-Seasonality alone (s(doy)) remains the dominant signal, similar to the simpler model (m1).
-Model explanatory power (adj. R² ≈ 0.42) is basically unchanged from m1 →
-the seasonal interactions did not uncover strong hidden relationships.
-
-```{r}
-Gdx3 <- Gdx %>%
-  mutate(season = case_when(
-    doy %in%  90:151 ~ "spring",     # adjust to local hydrology (snowmelt)
-    doy %in% 152:243 ~ "summer",
-    doy %in% 245:334 ~ "autumn",
-    TRUE             ~ "winter"
-  )) %>%
-  mutate(season = factor(season, levels = c("winter","spring","summer","autumn")))
-
-m3 <- gam(
-  lnHg ~ s(lnTOC, by = season, k = 6) + 
-         s(sUVa_sc, by = season, k = 6) + 
-         s(Q_sc, by=season, k = 6) +
-         s(doy, bs = "cc", k = 24)+
-     s(t, k=8), 
-  data  = Gdx3 %>% filter(site == "Outlet"),
-  method = "REML", select = TRUE
-)
-
-summary(m3); gam.check(m3, rep = 100) #plotting smooths
-
-
-par(mfrow = c(1,3))
-plot(m3, shade = TRUE, pages = 1)  # replace mod with your model object
-
-
-#m3Y <- gam(
-#  lnHg ~ s(lnTOC, k = 6) + 
-#         s(sUVa_sc, k = 6) + 
-#         s(Q_sc, k = 6) +
-#        #te(lnTOC, Q_sc, k = c(6,6)) +
-#        s(t, k = 6) +             # multi‑year trend (non‑cyclic)
-#         s(y, bs = "re"),
-#         #s(doy, bs = "cc", k = 24),
-#  data  = Gdx3 %>% filter(site == "Inlet"),
-#  method = "REML", select = TRUE
-#)
-
-#lnHg ~ season + s(lnTOC, by = season, k = 6) + s(sUVa_sc, by = season, k = 6) + s(doy, #bs="cc", k = 24)
-
-#summary(m3Y); gam.check(m3Y, rep = 100)
-```
-
-addin water discharge and combined with toc
-```{r}
-
-m4 <- gam(
-  lnHg ~ s(lnTOC, k = 6) +
-         s(sUVa_sc, k = 6) +
-         s(Q_sc, k = 6) +
-         te(lnTOC, Q_sc, k = c(6,6)) +   # optional: TOC–Q interaction
-         s(doy, bs = "cc", k = 24),
-  data  = Gdx %>% filter(site == "Inlet"),
-  method = "REML", select = TRUE
-)
-
-summary(m4); gam.check(m4, rep = 100)
-```
-
-inlet and outlet together and adding long.term year effect
-```{r}
-
-m5 <- gam(
-  lnHg ~ s(lnTOC, by = site, k = 6) +
-         s(sUVa_sc, by = site, k = 6) +
-         s(doy, by = site, bs = "cc", k = 24)+ 
-         s(site, bs = "re"),
-  data = Gdx,
-  method = "REML", select = TRUE
-)
-summary(m5); gam.check(m5, rep = 100)
-
-
-m5b <- gam(
-  lnHg ~ s(lnTOC, by = site, k = 4) +
-         s(sUVa_sc, by = site, k = 4) +
-         s(doy, by = site, bs = "cc", k = 10) +
-         s(t, k = 6) +             # multi‑year trend (non‑cyclic)
-         s(y, bs = "re"),
-  data = Gdx,
-  method = "REML", select = TRUE
-)
-
-
-m_probe <- gam(
-  lnHg ~ s(lnTOC, k=4) +
-         s(sUVa_sc, k=4) +
-         s(doy, bs="cc", k=10) +        # smaller cyclic k
-         s(site, bs="re") +             # random intercept only
-         s(t, k=6),                     # low-k long-term trend
-  data = Gdx, method = "REML", select = TRUE
-)
-summary(m_probe); gam.check(m_probe, rep = 100)
-
-
-m_final <- bam(
-  lnHg ~ s(Q_sc, k=6) +          # main driver
-         s(lnTOC, k=5) +         # weak, near-linear
-         s(sUVa_sc, k=4) +       # tiny effect (kept for completeness)
-         s(doy, bs="cc", k=12) + # seasonality
-         s(t, k=8) +             # slow trend
-         s(site, bs="re"),       # inlet vs outlet offset
-  data   = Gdx,
-  method = "fREML",
-  discrete = TRUE,
-  rho = 0.4, AR.start = Gdx$block_start
-)
-
-summary(m_final); gam.check(m_final, rep = 100)
 
 ```
 
