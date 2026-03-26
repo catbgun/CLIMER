@@ -213,7 +213,8 @@ gam.check(m4$gam)
 summary(m4$lme)
 anova(m4$lme)
 
-
+# 6) Concurvity
+concurvity(m3$gam, full = TRUE)
 
 
 
@@ -1683,7 +1684,7 @@ Gdx_inl <-yp %>% filter(Station == "Inlet") %>%
     site = factor(Station)
   )
 
-Gdx_out <-Gdx %>% filter(Station == "Outlet") %>%
+Gdx_out <-yp %>% filter(Station == "Outlet") %>%
   arrange(Station, Date) %>%
   mutate(
     doy = yday(Date),
@@ -1696,11 +1697,11 @@ Gdx_out <-Gdx %>% filter(Station == "Outlet") %>%
     site = factor(Station)
   )
 
-library(mgcv)
+#library(mgcv)
 ```
 
 ##GAMM - WITH DISCHARGE MANUSCRIPT
-converting to GAMM with copilot
+SIMPLE MODEL
 ```{r}
 #library(nlme)
 m1_gamm_inl <- gamm(
@@ -1759,7 +1760,9 @@ plot(m1_gamm_inl$lme)
 plot(m1_gamm_out$lme)
 
 # Residual correlation
-acf(resid(m1_gamm_inl$lme, type = "normalized"), lag.max = 24)
+acf(resid(m1_gamm_out$lme, type = "normalized"), lag.max = 24)
+
+#ACF of the normalized residuals from the GAMM showed no substantial autocorrelation; nearly all lags were within 95% bounds and no systematic decay was evident, indicating that the specified correlation structure adequately accounted for temporal dependence. 
 
 # Basis checks (interpret cautiously for `gamm`)
 gam.check(m1_gamm_out$gam)
@@ -1800,7 +1803,7 @@ Gdx3_out <- Gdx_out %>%
   mutate(season = factor(season, levels = c("winter","spring","summer","autumn")))
 
 #library(mgcv)
-library(nlme)
+#library(nlme)
 
 m2_gamm_inl <- gamm(
   lnHg ~ season +                                  # gives each season its Hg-intercepts
@@ -1816,6 +1819,11 @@ m2_gamm_inl <- gamm(
 # Smooths & significance
 summary(m2_gamm_inl$gam)
 gam.check(m2_gamm_inl$gam)
+
+# Residual correlation
+acf(resid(m2_gamm_inl$lme, type = "normalized"), lag.max = 24)
+# Concurvity
+concurvity(m1_gamm_inl$gam, full = TRUE)
 
 
 m2_gamm_out <- gamm(
@@ -1833,6 +1841,11 @@ m2_gamm_out <- gamm(
 # Smooths & significance
 summary(m2_gamm_out$gam)
 gam.check(m2_gamm_out$gam)
+
+# Residual correlation
+acf(resid(m2_gamm_out$lme, type = "normalized"), lag.max = 24)
+# Concurvity
+concurvity(m1_gamm_out$gam, full = TRUE)
 
 
 
