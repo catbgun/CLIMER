@@ -646,56 +646,6 @@ shapiro.test(outlet_THGTOC_m$THGTOC_m)
 ```
 
 
-```{r}
-library(rstatix)
-# Pairwise comparisons
-
-#suva not significantly different inlet and outlet, but what about during summer only?
-# Values to keep
-summer <- c( 6, 7, 8)
-
-# Remove rows where the city is in the cities_to_remove vector
-filtered_dx2 <- dx2[(dx2$month %in% summer), ]
-
-
-library("ggpubr")
-class(HMW$sUVa)
-ggboxplot(filtered_dx2, x = "Station", y = "sUVa_m", 
-          color = "Station", palette = c("#00AFBB", "#E7B800"),
-          ylab = "Weight", xlab = "Groups")
-
-
-pwc1 <- dx %>%
-  pairwise_t_test(TOC_m ~ Station, paired=FALSE, alternative= "two.sided")
-pwc2 <- dx %>%
-  pairwise_t_test(sUVa_m ~ Station, paired=FALSE, alternative= "two.sided")
-pwc3 <- dx %>%
-  pairwise_t_test(E2_E3_m ~ Station, paired=FALSE, alternative= "two.sided")
-pwc4 <- dx %>%
-  pairwise_t_test(THg_m ~ Station, paired=FALSE, alternative= "two.sided")
-pwc5 <- dx %>%
-  pairwise_t_test(THGTOC_m2 ~ Station, paired=FALSE, alternative= "two.sided")
-
-pwc6 <- filtered_dx2 %>%
-  pairwise_t_test(sUVa_m ~ Station, paired=FALSE, alternative= "two.sided")
-
-pwc6
-
-pwc1
-pwc2
-pwc3
-pwc4
-pwc5
- 
-
-pwc6 <- y16 %>%
-  pairwise_t_test(sUVa_m ~ Station, paired=FALSE, alternative= "two.sided")
-pwc7 <- y16 %>%
-  pairwise_t_test(E2_E3_m ~ Station, paired=FALSE, alternative= "two.sided")
-pwc6
-pwc7
-
-```
 
 Correlation plots
 ```{r}
@@ -839,6 +789,56 @@ head(dx_ts)
 
 yp <- left_join(dx_ts, dis_long, by = c("Station", "Date"))
 yp$Year=format(as.Date(yp$Date, format="%d.%m.%Y"),"%Y")
+
+```
+
+## t-test 30.03.2026
+
+```{r}
+library(rstatix)
+# Pairwise comparisons
+
+#suva not significantly different inlet and outlet, but what about during summer only?
+# Values to keep
+summer <- c( 6, 7, 8)
+
+# Remove rows where the city is in the cities_to_remove vector
+filtered_dx2 <- dx2[(dx2$month %in% summer), ]
+
+
+library("ggpubr")
+class(HMW$sUVa)
+ggboxplot(yp, x = "Station", y = "TOC_m", 
+          color = "Station", palette = c("#00AFBB", "#E7B800"),
+          ylab = "Weight", xlab = "Groups")
+
+
+yp1 <- yp[!is.na(yp$TOC_m),]
+pwc1 <- yp1 %>%
+  pairwise_t_test(TOC_m ~ Station, paired=FALSE, alternative= "less")
+yp2 <- yp[!is.na(yp$sUVa_m),]
+pwc2 <- yp %>%
+  pairwise_t_test(sUVa_m ~ Station, paired=FALSE, alternative= "two.sided")
+yp3 <- yp[!is.na(yp$THg_m),]
+pwc3 <- yp3 %>%
+  pairwise_t_test(THg_m ~ Station, paired=FALSE, alternative= "greater")
+yp4 <- yp[!is.na(yp$THGTOC_m2),]
+pwc4 <- yp4 %>%
+  pairwise_t_test(THGTOC_m2 ~ Station, paired=FALSE, alternative= "greater")
+
+pwc1
+pwc2
+pwc3
+pwc4
+
+ 
+
+pwc6 <- y16 %>%
+  pairwise_t_test(sUVa_m ~ Station, paired=FALSE, alternative= "two.sided")
+pwc7 <- y16 %>%
+  pairwise_t_test(E2_E3_m ~ Station, paired=FALSE, alternative= "two.sided")
+pwc6
+pwc7
 
 ```
 
@@ -1708,7 +1708,6 @@ m1_gamm_inl <- gamm(
   lnHg ~ s(lnTOC, k = 6, bs = "cs") +
          s(sUVa_sc, k = 6, bs = "cs") +
          s(Q_sc, k = 6, bs = "cs") +
-         #ti(lnTOC, sUVa_sc, k=c(5,5))+
          s(doy, bs = "cc", k = 24) +
          s(t, k = 12, bs = "cs"),
   data = Gdx_inl,
