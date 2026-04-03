@@ -22,8 +22,8 @@ dx_o$Station <- revalue(dx_o$Station, c("Langtjern, utl??p" = "Outlet","Innl??ps
 #install.packages("tidyverse")
 library(ggplot2)
 library(magrittr)
-#library(plyr)
-#library(dplyr)
+library(plyr)
+library(dplyr)
 library(scales)
 library(lubridate)
 library(anytime) 
@@ -100,8 +100,6 @@ class(dx$Date)
 
 ```{r}
 #FIND variability in inlet vs outlet TOC
-outlet <- subset(dx,  Station =="Outlet")
-inlet <- subset(dx,  Station =="Inlet")
 
 #library(pastecs)
 #stat.desc(outlet)
@@ -347,7 +345,6 @@ dx_G1 <- dxc1 %>%
   arrange(Station, Date)
 ```
 
-
 ##GAMM diagbnostics
 ```{r}
 # 1) Smooths & significance
@@ -375,7 +372,7 @@ summary(m1_gamm_inl$lme)
 ```
 
 
-Alt2 plot seasonal data
+Alt1 plot seasonal data (old)
 ```{r}
 #TOC
 ggplot(subset(dx, !is.na(TOC_m)))+
@@ -472,23 +469,32 @@ ggsave(filename = "output/sUVa_m.png",
 ```
 
 ```{r Monitoing inlet and outlet months}
-ggplot(subset(dx, Year %in% c(2016, 2017, 2018, 2019, 2020, 2021)))+
-  geom_point(aes(x=month_day, y=as.numeric(sUVa_m), colour=Year, shape=Station), size=4.5)+
+class(dx$month_day)
+dx$month_day <- as.Date(dx$month_day,format = "%d.%m")
+
+#ggplot(subset(dx, Year %in% c(2016, 2017, 2018, 2019, 2020, 2021)))+
+ggplot(dx)+
+  geom_point(aes(x=month_day, y=as.numeric(sUVa_m), colour=Station, shape=Station), size=4.5)+
   geom_smooth(aes(x=month_day, y=as.numeric(sUVa_m), colour=Station), size=1.2)+
-  #geom_point(aes(x=month_day, y=as.numeric(THg_s), colour=Station), shape=17, size=4.5)+
   scale_x_date(labels = date_format("%b"),breaks = date_breaks("1 month"))+
   theme_bw()+
-  #labs(y = "TOC (mg/L)")+
-  labs(y = "sUVa254nm (L/ mg C m) ")+
+  #labs(y = "DOC (mg/L)")+
+  labs(y = "sUVa254 (L/ mg C m) ")+
+  #labs(y = "Hg (ng/L) ")+
+  #labs(y = "Hg:DOC (ng/mg) ")+
    theme(
-    legend.text = element_text(size = 16),
+    legend.text = element_blank(),#size 16
     legend.title = element_blank(),
     axis.text.x = element_text(size=16, angle = 45, hjust = 1, colour="black"),
     axis.text.y = element_text(size=17, colour="black"),
     strip.text = element_text(size = 17),
     axis.title.x = element_blank(),
     axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0), size=17, colour="black")
-  )
+  )+
+    scale_colour_manual(values = c("#0072B2", "#CC79A7"))+
+  scale_y_continuous(labels = label_number(accuracy = 0.1)) +
+  ylim(3.5, 5.3) #only use this for suva to get space for the figure labelling
+
   #facet_grid(.~ Year)+
   #scale_colour_manual(values = c("#0072B2", "#CC79A7"))
 
@@ -906,7 +912,7 @@ Timeline, seasonality and correlations
 - correlation analysis
 - keep in mind possible lag in time
 - Hg shorter time frame than TOC
-```{r}
+```{r Decompose}
 dx_ts_inlet <- subset(yp, Station == "Inlet") #daily?
 dx_ts_outlet <- subset(yp, Station == "Outlet") #daily?
 
@@ -1152,30 +1158,42 @@ plot(outlet$trend_TOC, outlet$trend_Hg, use = "complete.obs")
 cor(inlet$trend_TOC, inlet$trend_Hg, use = "complete.obs")
 plot(inlet$trend_TOC, inlet$trend_Hg, use = "complete.obs")
 
+```
+
+
+```{r Plot decomposed data}
+#NEED YEAR
 inlet4$Year=format(as.Date(inlet$Date, format="%d.%m.%Y"),"%Y")
 outlet4$Year=format(as.Date(outlet$Date, format="%d.%m.%Y"),"%Y")
 
-
 #SEASONAL
 ggplot(subset(outlet4, Year == 2018))+
+  geom_line(aes(x=Date, y=seasonal_dis, colour="seasonal_dis"), linetype = "dashed", linewidth=1.5)+
   geom_line(aes(x=Date, y=seasonal_Hg, colour="seasonal_Hg"), linewidth = 1.5)+
   geom_line(aes(x=Date, y=seasonal_sUVa, colour="seasonal_sUVa"), linewidth = 1.5)+
-  #geom_line(aes(x=Date, y=seasonal, colour="seasonal"))+
   geom_line(aes(x=Date, y=seasonal_TOC, colour="seasonal_TOC"), linewidth = 1.2)+
-  geom_line(aes(x=Date, y=seasonal_dis, colour="seasonal_dis"), linetype = "dashed", linewidth=1.5)+
+  #geom_line(aes(x=Date, y=seasonal, colour="seasonal"))+
   scale_x_date(
     date_breaks = "1 month", # Sets a major tick mark every month
     date_labels = "%b"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
   )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.title = element_blank(),
-        legend.text = element_text(size = 12))+
+   theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size= 16, colour="black"),
+        axis.text.y = element_text(size= 17, colour="black"),
+        axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0), size=17, colour="black"),        
+        axis.title.x = element_blank(),        
+        legend.text = element_blank(),#size = 12, colour="black"
+        plot.title = element_text(size = 20))+
   ggtitle("Outlet - seasonal")+
+  ylab("Seasonal component (centered)")+
   scale_colour_manual("", 
-                      labels = c("Hg", "sUVa254", "TOC", "Water discharge"),
-                      breaks = c("seasonal_Hg", "seasonal_sUVa", "seasonal_TOC", "seasonal_dis"),
-                      values = c("red", "orange", "brown", "blue")) 
+                      labels = c("DOC","sUVa254",  "Hg", "Water discharge"),
+                      breaks = c("seasonal_TOC","seasonal_sUVa", "seasonal_Hg", "seasonal_dis"),
+                      values = c("brown","orange","red", "blue")) +
+  scale_y_continuous(labels = label_number(accuracy = 0.1))
    bnscale_y_log10()
+  
+  
 
   #  scale_colour_discrete(name = "Dose", labels = c("Hg", "sUVa254", "TOC", "Water discharge"))
 
