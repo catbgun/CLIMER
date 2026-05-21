@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 *Installation of packages* 
 ```{r}
 #install.packages(c("ggplot2", "lubridate", "scales", "plyr"))
-Packages <- c("ggplot2", "lubridate", "scales", "plyr", "dplyr", "Rmisc", "ggpubr")
+Packages <- c("ggplot2", "lubridate", "scales", "plyr", "dplyr", "Rmisc", "ggpubr", "rstatix")
 lapply(Packages, library, character.only = TRUE)
 ```
 
@@ -43,7 +43,6 @@ dx$Date <- factor(dx$Date,
 ```
 Summary 
 ```{r}
-
 #dz <- na.omit(dx)
 dx %>% 
   group_by(Size) %>% 
@@ -59,8 +58,6 @@ dx %>%
     avg_pH = mean(pH),
     sd_pH = sd(pH)
 )
-
-
 ```
 
 Statistics
@@ -88,7 +85,6 @@ ggqqplot(HMW$THg_DOC)
 #Normality test
 shapiro.test(LMW$THg_DOC)
 shapiro.test(HMW$THg_DOC)
-
 ```
 
 ```{r Normality testing}
@@ -110,7 +106,6 @@ ggqqplot(HMW$sUVa)
 #Normality test
 shapiro.test(LMW$sUVa)
 shapiro.test(HMW$sUVa)
-
 ```
 
 ```{r Normality testing}
@@ -159,7 +154,6 @@ shapiro.test(HMW$THg_DOC)
 
 
 Number of observations < 30 and most failing the normality test. 
-At .05 significance level, we conclude that the gas mileage data of manual and automatic transmissions in mtcar are nonidentical populations (if p-value < 0.05).
 http://www.sthda.com/english/wiki/unpaired-two-samples-wilcoxon-test-in-r
 ```{r}
 #"two.sided" (default),
@@ -170,7 +164,6 @@ wilcox.test(E2_E3 ~ Size, data=dx)
 HMW <- subset(dx, Size =="HMW")
 
 #Visualise boxplot
-library("ggpubr")
 class(HMW$sUVa)
 ggboxplot(HMW, x = "Position", y = "E2_E3", 
           color = "Position", palette = c("#00AFBB", "#E7B800"),
@@ -180,17 +173,10 @@ wilcox.test(E2_E3 ~ Position, data=HMW)
 
 ```
 
-
 ```{r}
-# Load required R packages
-library(tidyverse)
-library(rstatix)
-library(ggpubr)
 #STATISTICAL TESTING
-
 #Bulk er dessverre ikke med i datasettet her, kun i biodeg-dataene. Men vi kan henvise til verdier i appendiks. 
 # Pairwise comparisons
-
 length(LMW$THg_DOC)
 length(HMW$THg_DOC)
 length(LMW$sUVa)
@@ -219,7 +205,6 @@ ggscatter(dx, x = "sUVa", y = "THg" ,
           xlab ="sUva" , ylab ="Hg")+
   facet_grid(.~Position)
 ```
-
 
 #1) Boxplot
 - look for differences between LMW and HMW optical properties
@@ -260,7 +245,6 @@ ggplot(dx, aes(sUVa, THg))+
     scale_colour_manual(values = c("#0072B2", "#CC79A7", "#bdd4ff", "#e1b0cb"))
 
 #  facet_grid(. ~ factor(Position))+
-
 
 ggplot(dx, aes(sUVa, THg_DOC))+
   geom_point(aes(colour=interaction(factor(Size))), size=6)+
@@ -314,27 +298,8 @@ theme(axis.text.y = element_text(size= 20, colour="black"),
                 width=.2, col="black")
 ```
 
-#2) VELDIG BRA BAR FOR TID PÅ X-AKSE 
-
-```{r}
-#for the facet, the side of the variable you put the .~ determined if vertical or horisontal
-dx$Date = as.Date(dx$Date)
-HMW<- subset(d1, Size == "HMW")
-LMW<- subset(d1, Size == "LMW")
-#|Position == "Hypolimnion"
-#See all data next to each other either with natural or compressed x-axis
-ggplot(data = subset(d1, Position == "Inlet"|Position == "Outlet"),
-       aes(y=DOC, x=Date, fill=(factor(Position))))+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  geom_bar(position=position_dodge(), stat="identity", size=1, linetype="dashed")+
-  facet_grid(Size~., scale="free")
-ggtitle("sUVa")
-
-```
-
 
 # 3) For å se om forskjeller i gjennomsnitt mellom inlet, hypo og outlet. Lager et sammendrag først og så plottes det
-
 ```{r}
 library(Rmisc)
 head(dx)
@@ -387,7 +352,7 @@ b2 <- subset(b1, Lake!="Hypolimnion")
 b3<-subset(b2,Fraction!="Bulk")
 
 #Rate.DOC.ave
-ggplot(b2, aes(x=Fraction, y= Rate.DOC.ave, fill=Fraction))+
+ggplot(b3, aes(x=Fraction, y= Rate.DOC.ave, fill=Fraction))+
   geom_boxplot()+
   facet_grid(.~Lake)+
   scale_y_reverse() 
@@ -397,27 +362,30 @@ ggplot(LM, aes(x=Fraction, y= Rate.DOC.ave, fill=Fraction))+
   facet_grid(.~Lake)+
   scale_y_reverse() 
  
-#Relative biodeg
-rel_biodeg <- ggplot(b3, aes(x=Fraction, y= Rel.rate.DOC))+
+#Relative biodeg FIGURE 4
+#rel_biodeg <- 
+ggplot(b3, aes(x=Fraction, y= Rel.rate.DOC))+
   geom_boxplot(aes(fill=interaction(Lake, Fraction)))+
   facet_grid(.~Lake)+
   scale_fill_manual(values = c("#0072B2", "#CC79A7", "#bdd4ff", "#e1b0cb"))+
   theme_bw()+
-  theme(axis.text.y = element_text(size= 14, colour="black"),
+  theme(axis.text.y = element_text(size= 18, colour="black"),
         axis.title.x = element_blank(),
-        axis.title.y = element_text(size = 18, margin=margin(0,20,0,0)),
-        strip.text.x = element_text(size = 19),
-        axis.text.x = element_text(angle=0, hjust=0.5, vjust=0, size = 16, colour="black"),
+        axis.title.y = element_text(size = 20, margin=margin(0,20,0,0)),
+        strip.text.x = element_text(size = 22),
+        axis.text.x = element_text(angle=0, hjust=0.5, vjust=0, size = 18, colour="black"),
         plot.title=element_text(size=30, face="bold"),
         legend.text=element_blank(),
         legend.title = element_blank())+
   labs(y = "DOC biodegradation rate (%)", x="Size fraction" )+
+  scale_x_discrete(labels = c("LMW" = "Low\n molecular\n weight", "HMW" = "High\n molecular\n weight"), limits=rev)
+
   scale_x_discrete(limits=rev)
+
 
 ggsave(filename = "output/rel_biodeg.png",
        plot = rel_biodeg,
        width = 7, height = 5, units = "in")
-
 
 
 ggplot(b3, aes(x=Lake, y= Rate.DOC.ave, fill=Lake))+
@@ -458,17 +426,8 @@ sum_nx <- bs_sum %>%
   group_by(group) %>% 
   length(dplyr::across(.cols  = where(is.numeric)))
 
-
-
-
-
-
 bs_sum %>% count(Rate_C_mg_ave)
-
-
 s <- summarise(bs_sum, Rate_C_mg_ave, Rate.DOC.ave, .by = NULL, .groups = group)
-
-
 ```
 
 
@@ -653,24 +612,6 @@ ggsave(filename = "output/Hg_TOC_corr.png",
        width = 7, height = 5, units = "in")
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-  
-  #  facet_grid(Lake ~ Fraction, scales="free")
-labs(title = "DOM Size and Aromaticity", x = "sUVa (Abs254:DOC*100)", y = "Rate of DOC decay:DOC (/h)")
-ylim(0, -0.007)+
-  scale_colour_manual(values=c("#F8766D", "#7CAE00", "#00BFC4"))+
-  xlim(0, 8)
 ```
 
 # Biodeg correlation plot

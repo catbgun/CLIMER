@@ -19,60 +19,23 @@ dx_o$Station <- revalue(dx_o$Station, c("Langtjern, utl??p" = "Outlet","Innl??ps
 ```
 
 ```{r}
-#install.packages("tidyverse")
 library(ggplot2)
 library(magrittr)
 library(plyr)
 library(dplyr)
 library(scales)
 library(lubridate)
-library(anytime) 
 library(tidyr)
-library(pastecs)
 library(ggpubr)
 library(rstatix)
-library(Hmisc)
-library("PerformanceAnalytics")
-library(tidyverse)
-```
-
-Extra
-```{r}
-#mA1 <- gamm(
-#  TOC_m ~ Station + s(doy, bs = "cc", k = 24),
-#  data = dx_G,
-#  method = "REML",
-#  #control = ctrl, #supposed to help, common for environmental data. Does not seem to make a difference
-#  correlation = nlme::corCAR1(form = ~ t | Station)  # <-- grouping added
-#)
-
-#The coefficient for SiteOutlet tests whether the Outlet mean differs from Inlet after accounting for seasonality and autocorrelation.
-# QB: Is one site consistently greater across the year?”
-#mA2 <- gamm(
-#  TOC_m ~ Station + s(doy, bs = "cc", k = 24) + s(t, k = 10, bs = "cs"),
-#  data = dx_G,
-#  method = "REML",
-#  correlation = nlme::corCAR1(form = ~ t | Station),  # <-- grouping added
-#  #control = ctrl
-#)
-#summary(mA1$gam)
-
-#Site coefficient now answers: consistently higher/lower, averaged over the period, after season and long‑term trend are removed.
-#QC: Do the temporal patterns differ between sites?
-
-#mB1 <- gamm(
-#  TOC_m ~ Site + s(doy, bs = "cc", k = 24, by = Site)+ s(t, k = 10, bs = "cs"),
-#  data = dx_G,
-#  method = "REML",
-#  correlation = nlme::corCAR1(form = ~ t | Site),  # <-- grouping added
-#  #control = ctrl
-#)
-#summary(mB1$gam)
+library(zoo)
+library(mgcv)
+library(nlme)
+library(gratia)
 ```
 
 Adding extended abs-data
 ```{r}
-#load
 abs <- read.table("263001_Extended abs data.txt", sep = "\t", header = TRUE)
 
 #from long to wide
@@ -89,21 +52,13 @@ dxx <- left_join(dx_o, abs_wide, by = c("Station.ID", "Date"))
 
 dxx$Date <- as.Date(dxx$Date,format = "%d.%m.%Y")
 dxx$Year=format(as.Date(dxx$Date, format="%d.%m.%Y"),"%Y")
-dxx$month_day=format(as.Date(dxx$Date, format="%d.%m"),"%d.%m")
 dxx$month_day <- format(as.Date(dxx$Date, format="%d.%m"),"%d.%m")
-
 dxx$month =format(as.Date(dxx$Date, format="%d.%m.%Y"),"%m")
 
 dx <- subset(dxx, Year %in% c(2016, 2017, 2018, 2019, 2020, 2021))
-class(dx$Date)
 ```
 
-```{r}
-#FIND variability in inlet vs outlet TOC
-
-#library(pastecs)
-#stat.desc(outlet)
-
+```{r Calculate indices}
 dx$sUVa_m = (dx$"254"/dx$TOC_m)*100 #with new abs data from Areti
 dx$sUVa_s = (dx$X254nm_s/dx$DOC_s)*100
 
@@ -111,363 +66,8 @@ dx$THGTOC_m2 = dx$THg_m/dx$TOC_m
 dx$THGDOC_s2 = dx$THg_s/dx$DOC_s
 ```
 
-Using GAMM to look for significant difference between inlet and outlet
-```{r inlet versus outlet}
-library(mgcv)   # gam/gamm/bam
-library(nlme)   # correlation structures used by gamm()
-library(gratia) # nicer plots/diagnostics for mgcv
-
-# 1) TOC
-dxTOC <- dx[!is.na(dx$TOC_m), ]
-# Add seasonality and numeric time - THIS IS THE ONE!!!!!!!!!!!
-dxTOC <- dxTOC[order(dxTOC$Date), ]
-dxTOC$doy <- yday(dxTOC$Date)          # day of year for seasonal smooth
-dxTOC$time_num <- as.numeric(dxTOC$Date) / (60*60*24)  # days since epoch
-dxTOC$lnTOC <- log(dxTOC$TOC_m)
-
-m1 <- gamm(
-  lnTOC ~ Station +
-    s(time_num, k = 40) +            # long-term nonlinear trend
-    s(doy, bs = "cc", k = 30),       # seasonal cycle, cyclic smooth
-  random = list(Date = ~1),
-  correlation = corAR1(form = ~ time_num| Station),
-  data = dxTOC
-)
-
-summary(m1$gam)
-gam.check(m1$gam)
-summary(m1$lme)
-acf(resid(m1$lme, type = "normalized"), lag.max = 24)
-
-anova(m1$lme)
-
-# 2) sUVa
-dxsUVa <- dx[!is.na(dx$sUVa_m), ]
-
-# Add seasonality and numeric time - THIS IS THE ONE!!!!!!!!!!!
-dxsUVa <- dxsUVa[order(dxsUVa$Date), ]
-dxsUVa$doy <- yday(dxsUVa$Date)          # day of year for seasonal smooth
-dxsUVa$time_num <- as.numeric(dxsUVa$Date) / (60*60*24)  # days since epoch
-dxsUVa$lnsUVa <- log(dxsUVa$sUVa_m)
-
-m2 <- gamm(
-  lnsUVa ~ Station +
-    s(time_num, k = 40) +            # long-term nonlinear trend
-    s(doy, bs = "cc", k = 30),       # seasonal cycle, cyclic smooth
-  random = list(Date = ~1),
-  correlation = corAR1(form = ~ time_num| Station),
-  data = dxsUVa
-)
-
-summary(m2$gam)
-gam.check(m2$gam)
-summary(m2$lme)
-anova(m2$lme)
-
-# 3) Hg
-dxHg <- dx[!is.na(dx$THg_m), ]
-
-# Add seasonality and numeric time - THIS IS THE ONE!!!!!!!!!!!
-dxHg <- dxHg[order(dxHg$Date), ]
-dxHg$doy <- yday(dxHg$Date)          # day of year for seasonal smooth
-dxHg$time_num <- as.numeric(dxHg$Date) / (60*60*24)  # days since epoch
-dxHg$lnHg <- log(dxHg$THg_m)
-
-m3 <- gamm(
-  lnHg ~ Station +
-    s(time_num, k = 40) +            # long-term nonlinear trend
-    s(doy, bs = "cc", k = 30),       # seasonal cycle, cyclic smooth
-  random = list(Date = ~1),
-  correlation = corAR1(form = ~ time_num| Station),
-  data = dxHg
-)
-
-summary(m3$gam)
-gam.check(m3$gam)
-summary(m3$lme)
-
-anova(m3$lme)
-
-# 4) Hg:DOC
-dxHgDOC <- dx[!is.na(dx$THGTOC_m2), ]
-
-# Add seasonality and numeric time - THIS IS THE ONE!!!!!!!!!!!
-dxHgDOC <- dxHgDOC[order(dxHgDOC$Date), ]
-dxHgDOC$doy <- yday(dxHgDOC$Date)          # day of year for seasonal smooth
-dxHgDOC$time_num <- as.numeric(dxHgDOC$Date) / (60*60*24)  # days since epoch
-dxHgDOC$lnHgDOC <- log(dxHgDOC$THg_m)
-
-m4 <- gamm(
-  lnHgDOC ~ Station +
-    s(time_num, k = 40) +            # long-term nonlinear trend
-    s(doy, bs = "cc", k = 30),       # seasonal cycle, cyclic smooth
-  random = list(Date = ~1),
-  correlation = corAR1(form = ~ time_num| Station),
-  data = dxHgDOC
-)
-
-summary(m4$gam)
-gam.check(m4$gam)
-summary(m4$lme)
-anova(m4$lme)
-
-# 6) Concurvity
-concurvity(m3$gam, full = TRUE)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#DIAGNOSTICS
-# Smooths (publication-quality)
-draw(mB2$gam)             # or draw(mB1$gam), draw(mB2$gam)
-
-# Residual autocorrelation (should be ~white noise)
-acf(resid(mB2$lme, type = "normalized"), lag.max = 24)
-
-# Residual checks (normality, heteroscedasticity, fitted vs residuals)
-plot(mB2$lme)
-
-# Basis dimension tests (interpret cautiously for gamm)
-gam.check(mB2$gam)
-
-# Optional: Compare models
-#AIC(mA1$lme, mA2$lme, mB1$lme, mB2$lme)
-```
-
-```{r}
-#extra old
-
-#1) TOC
-#remove NAs from student entries
-dxc1 <- dx_G[!is.na(dx_G$TOC_m), ]
-
-# QA: are the sites different on average?
-ctrl <- nlme::lmeControl(niterEM = 60, msMaxIter = 200, maxIter = 100,
-                         opt = "optim", msVerbose = FALSE)
-
-#site specific short and long term time trends. USE THIS!
-mB2 <- gamm(
-  lnTOC ~ Site +
-        s(doy, bs = "cc", k = 24, by = Site) +
-        s(t,   k = 10, bs = "cs", by = Site),
-  data = GdxYY,
-  method = "REML",
-  correlation = nlme::corCAR1(form = ~ t| Site),
-  control = ctrl
-)
-summary(mB2$gam)
-gam.check(mB2$gam)
-acf(resid(mB2$lme, type = "normalized"), lag.max = 24)
-
-
-# 2) sUVa
-#remove NAs from student entries
-dxc1 <- dx[!is.na(dx$sUVa_m), ]
-
-dx_G1 <- dxc1 %>%
-  mutate(
-    Site = droplevels(factor(Station, levels = c("Inlet","Outlet"))),
-    Date = as.Date(Date),
-    doy  = yday(Date),                     # 1..365
-    t    = as.numeric(Date - min(Date))    # days since start (continuous)
-  ) %>%
-  arrange(Station, Date)
-
-#site specific short and long term time trends. USE THIS!
-mB2 <- gamm(
-  TOC_m ~ Site +
-        s(doy, bs = "cc", k = 24, by = Site) +
-        s(t,   k = 10, bs = "cs", by = Site),
-  data = dx_G,
-  method = "REML",
-  correlation = nlme::corCAR1(form = ~ t| Site),
-  #control = ctrl
-)
-summary(mB2$gam)
-gam.check(mB2$gam)
-
-
-#If the s(doy, by=Site) smooths are significantly different (or clearly different when plotted), inlet and outlet do not share the same seasonal cycle.
-
-dxTOC_ <-dxTOC  %>%
-  arrange(Station, Date) %>%
-  mutate(
-    doy = yday(Date),
-    y = year(Date),
-    t = as.numeric(difftime(Date, min(Date), units = "days")),
-    lnHg = log(THg_m),               # often stabilizes variance; check first
-    lnTOC = log(TOC_m),          # log1p if zeros are possible
-    sUVa_sc = scale(sUVa_m),       # standardize for interpretability
-    site = factor(Station)
-  )
-
-
-m_simple <- gamm(
-  lnTOC ~ Station + s(doy, bs="cc", k=24), #+ s(t, bs="cs", k=10),
-  data = dxTOC_,
-  correlation = corCAR1(form = ~ t|Station),
-  method = "REML"
-)
-summary(m_simple$gam)
-
-gam.check(m_simple$gam)
-
-acf(resid(m_simple$lme, type = "normalized"), lag.max = 24)
-
-mB2 <- gamm(
-  lnTOC ~ Station +
-        s(doy, bs = "cc", k = 24, by = Station) +
-        s(t,   k = 10, bs = "cs", by = Station),
-  data = dxTOC_,
-  method = "REML",
-  correlation = nlme::corCAR1(form = ~ t| Station)
-  #control = ctrl
-)
-
-
-dx_G1 <- dxc1 %>%
-  mutate(
-    Site = droplevels(factor(Station, levels = c("Inlet","Outlet"))),
-    Date = as.Date(Date),
-    doy  = yday(Date),                     # 1..365
-    t    = as.numeric(Date - min(Date))    # days since start (continuous)
-  ) %>%
-  arrange(Station, Date)
-```
-
-##GAMM diagbnostics
-```{r}
-# 1) Smooths & significance
-summary(m1_gamm_inl$gam)
-plot(m1_gamm_inl$gam, pages = 1, shade = TRUE)
-
-# 2)  Residuals vs Fitted
-plot(m1_gamm_inl$lme)
-
-# 3) Normality of Residuals
-gam.check(m1_gamm_inl$gam)
-
-# 4) Residual versus time
-plot(resid(m1_gamm_inl$lme), type="l")
-
-# 5 Autocorrelation Check (ACF of residuals). Residual correlation
-acf(resid(m1_gamm_inl$lme, type = "normalized"), lag.max = 24)
-
-# 6) Concurvity
-concurvity(m1_gamm_inl$gam, full = TRUE)
-
-# Summary of mixed model (AR1, random effects)
-summary(m1_gamm_inl$lme)
-
-```
-
-
-Alt1 plot seasonal data (old)
-```{r}
-#TOC
-ggplot(subset(dx, !is.na(TOC_m)))+
-  geom_point(aes(x=month_day, y=TOC_m, shape=Station, colour=Year), size=5)+
-  #geom_line(aes(x=month_day, y=TOC_m, colour=Station))+
-  geom_smooth(aes(x=month_day, y=TOC_m, colour=Station), shape=16, size=1)+
-  geom_point(aes(x=month_day, y=DOC_s, colour=Station), shape=17, size=5)+
-  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
-  theme_bw()+
-  labs(y = "TOC (mg/L)")+
-   theme(
-    legend.text = element_text(size = 14),
-    legend.title = element_text(size = 14),
-    axis.text.x = element_text(size=12, angle = 45, hjust = 1),
-    axis.text.y = element_text(size=12),
-    strip.text = element_text(size = 12),
-    axis.title.x = element_blank(),
-    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0))
-  )+
-  facet_grid(.~ Year)
-
-#Hg
-ggplot(subset(dx, !is.na(THg_m)))+
-  geom_point(aes(x=month_day, y=THg_m, shape=Station, colour=Station), size=4)+
-  #geom_line(aes(x=month_day, y=TOC_m, colour=Station))+
-  geom_smooth(aes(x=month_day, y=THg_m, colour=Station), shape=16, size=1)+
-  geom_point(aes(x=month_day, y=DOC_s, colour=Station), shape=17, size=5)+
-  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
-  theme_bw()+
-  labs(y = "TOC (mg/L)")+
-   theme(
-    legend.text = element_text(size = 14),
-    legend.title = element_text(size = 14),
-    axis.text.x = element_text(size=12, angle = 45, hjust = 1),
-    axis.text.y = element_text(size=12),
-    strip.text = element_text(size = 12),
-    axis.title.x = element_blank(),
-    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0))
-  )+
-  facet_grid(.~ Year)
-
-ggsave(filename = "output/TOC_m.png",
-       plot = TOC,
-       width = 11, height = 7, units = "in")
-
-#THg:TOC
-ggplot(data=subset(dx, !is.na(THg_m)))+
-  geom_point(aes(x=month_day, y=as.numeric(sUVa_m), colour=Station, shape=Station), size=4.5)+
-  geom_smooth(aes(x=month_day, y=as.numeric(sUVa_m), colour=Station), shape=16, size=1.2)+
-  #geom_point(aes(x=month_day, y=as.numeric(THg_m), colour=Station), shape=17, size=4.5)+
-  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
-  theme_bw()+
-  labs(y = "THg (ng/L)")+
-   theme(
-    legend.text = element_text(size = 16),
-    legend.title = element_blank(),
-    axis.text.x = element_text(size=16, angle = 45, hjust = 1, colour="black"),
-    axis.text.y = element_text(size=17, colour="black"),
-    strip.text = element_text(size = 17),
-    axis.title.x = element_blank(),
-    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0), size=17, colour="black")
-  )+
-  facet_grid(.~ Year)+
-  scale_colour_manual(values = c("#0072B2", "#CC79A7"))
-
-
-ggsave(filename = "output/Hg_DOC_m.png",
-       plot = Hg_DOC,
-       width = 11, height = 7, units = "in")
-
-#sUVa
-ggplot(dx)+
-  geom_point(aes(x=month_day, y=sUVa_m, colour=Station), shape=16, size=4.5)+
-  geom_smooth(aes(x=month_day, y=sUVa_m, colour=Station), shape=16, size=1.2)+
-  #geom_point(aes(x=month_day, y=sUVa_s, colour=Station), shape=17, size=4.5)+
-  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
-    theme_bw()+
-  labs(y = "sUVa-254nm (L/mg C m)")+
-  theme(
-    legend.text = element_text(size = 16),
-    legend.title = element_blank(),
-    axis.text.x = element_text(size=16, angle = 45, hjust = 1, colour="black"),
-    axis.text.y = element_text(size=17, colour="black"),
-    strip.text = element_text(size = 17),
-    axis.title.x = element_blank(),
-    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0), size=17, colour="black")
-  )+
-  facet_grid(.~ Year)+
-  scale_colour_manual(values = c("#0072B2", "#CC79A7"))
-
-ggsave(filename = "output/sUVa_m.png",
-       plot = sUVa,
-       width = 11, height = 7, units = "in")
-```
-
+## Plotting monitoring data - seasonal variation
+For Figure 1.
 ```{r Monitoing inlet and outlet months}
 class(dx$month_day)
 dx$month_day <- as.Date(dx$month_day,format = "%d.%m")
@@ -495,70 +95,18 @@ ggplot(dx)+
   scale_y_continuous(labels = label_number(accuracy = 0.1)) +
   ylim(3.5, 5.3) #only use this for suva to get space for the figure labelling
 
-  #facet_grid(.~ Year)+
-  #scale_colour_manual(values = c("#0072B2", "#CC79A7"))
-
-
 ggsave(filename = "output/Hg_DOC_m.png",
        plot = Hg_DOC,
        width = 11, height = 7, units = "in")
-
-
-#LOOk at difference between inlet and outlet in suva
-dx$Dates = dx$Date
-inl <- subset(dx, Station =="Inlet")
-out <- subset(dx, Station =="Outlet")
-
-both <- merge(inl, out, by="Dates")
-both$diff <- (both$sUVa_m.x - both$sUVa_m.y)
-both$diff2 <- (both$E2E3_m.x - both$E2E3_m.y)
-both$diff3 <- (both$THGTOC_m2.x - both$THGTOC_m2.y)
-both$diff4 <- (both$THg_m.x - both$THg_m.y)
-both$THg_m.y
-typeof(both$sUVa_m.x)
-
-bothy <- subset(both, !Year.x == 2016)
-
-ggplot(bothy)+
-  #geom_point(aes(x=month_day.x, y=diff, colour=Year.x), shape=16, size=2)+
-  geom_point(aes(x=month_day.x, y=diff3, colour=Year.x), size=2)+
-  geom_smooth(aes(x=month_day.x, y=diff3), size=1.2)+
-  #geom_point(aes(x=month_day, y=sUVa_s, colour=Station), shape=17, size=4.5)+
-  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
-    theme_bw()+
-  labs(y = "Inlet - Outlet (THg)")+
-  theme(
-    legend.text = element_text(size = 16),
-    legend.title = element_blank(),
-    axis.text.x = element_text(size=16, angle = 45, hjust = 1, colour="black"),
-    axis.text.y = element_text(size=17, colour="black"),
-    strip.text = element_text(size = 17),
-    axis.title.x = element_blank(),
-    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0), size=17, colour="black")
-  )+
-  geom_hline(yintercept = 0)
-  
-ggsave(filename = "output/sUVa_m.png",
-       plot = sUVa,
-       width = 11, height = 7, units = "in")
-```
-
-something trange with THg, needs to investigae
-```{r}
-write.csv(dx, "climer checkin.csv")
 ```
 
 21.06.2024 - test for significant difference between inlet and outlet in 
 TOC, sUVa, THg, THg and THg-TOC
 - first check if data is normally distrubuted (Shapiro-wilk test)
 From the output, the p-value > 0.05 implying that the distribution of the data are not significantly different from normal distribution. In other words, we can assume the normality.
-- then perform corrct test (t-test or Mann Whitney )
-
+- then perform correct test (t-test or Mann Whitney )
 If the sample size is large enough (n > 30), we can ignore the distribution of the data and use parametric tests.
-```{r normal ditribution and difference inlet/outlet}
-#library(dplyr)
-#library(ggpubr)
-
+```{r TOC normality test}
 inlet_TOC <- subset(dx, Station == "Inlet")
 outlet_TOC <- subset(dx, Station == "Outlet")
 length(inlet_TOC$TOC)
@@ -579,7 +127,6 @@ ggqqplot(outlet_TOC$TOC)
 #Normality test
 shapiro.test(inlet_TOC$TOC)
 shapiro.test(outlet_TOC$TOC)
-
 ```
 
 ```{r sUVa normality test}
@@ -651,23 +198,14 @@ shapiro.test(inlet_THGTOC_m$THGTOC_m)
 shapiro.test(outlet_THGTOC_m$THGTOC_m)
 ```
 
-
-
-Correlation plots
-```{r}
-library("ggpubr")
-head(dx)
-
-inelt <- subset(dx, Station =="Inlet")
-
+## correlation analyses and scatter plots
+```{r Scatter plots}
 dx <- dx %>%
   mutate(
     year = year(Date),   # Extracts the year
     month = month(Date), # Extracts the month as a number
     day = day(Date)      # Extracts the day of the month
   )
-
-print(unique(dx$month))
 
 dx2 <- dx %>%
   mutate(
@@ -688,8 +226,6 @@ dx2 <- dx %>%
     )
   )
 
-class(dx2$month)
-
 #remove months of april and may to see if this improves correlations. this is for INLET. Month =4 and 5
 # Values to remove
 s_melt <- c(4, 5) #valid for inlet
@@ -698,7 +234,6 @@ s_melt2 <- c( 5,6)
 
 # Remove rows where the city is in the cities_to_remove vector
 filtered_dx2 <- dx2[!(dx2$month %in% s_melt), ]
-
 
 #colour-code by month
 ggplot(filtered_dx2)+
@@ -735,52 +270,10 @@ ggscatter(dx, x ="E2_E3_m",  y ="THGTOC_m",
           xlab ="" , ylab ="")+
   facet_grid(.~Station)
 
-
-# facet_grid(.~year(dx$Date), scales="free_x")
-    
-
-#CONTINUING previous plots
-    
-head(dx)
-class(dx$TOC_m)
-    #IMPORTANT!!! Correlation plot for Hg and DOM 
-  ggplot(dx, aes(TOC_m, THg_m))+
-      geom_point(size=6)+
-      geom_smooth(method = "lm", se = FALSE, colour="black")
-      facet_grid(. ~ factor(Station), scales="free")
-      xlim(4, 6)
-      
-      inlet <- subset(dx, Station == "Inlet")
-      outlet <- subset(dx, Station == "Outlet")
-    head(dx)
-      #Correlation analysis
-      #library(dplyr)
-      b <- select(dx, TOC_m, THg_m, MeHg_m, sUVa_m, sVISa_m, SAR_m, THg_m, labile_m, THGTOC_m, MeHGTOC_m)
-      #library(Hmisc)
-      rcorr(as.matrix(b), type="pearson")
-      class(d)
-      #library("PerformanceAnalytics")
-      chart.Correlation(b, histogram=TRUE, pch=19)
-      head(d)
-      
-      
-      #MAKKING THE CORRELATION ASSESSMENT
-      #library(tidyverse)
-      #library(ggpubr)
-      theme_set(theme_pubr())
-      ggplot(outlet, aes(x = SAR_m, y = THGTOC_m)) +
-        geom_point() +
-        stat_smooth()+
-        stat_smooth(method = lm)
-      
-model <- lm(THGTOC_m ~ sVISa_m, data = dx)
-model  
-summary(model)
 ```
 
 Upload and fix discharge data
-- add to dx_ts?
-```{r}
+```{r Including discharge data}
 dx_ts <- dx[,c(3:6, 19, 40)]
 
 dis <- read.table("Langtjern_discharge.txt", sep = "\t", header = TRUE)
@@ -790,29 +283,21 @@ dis$Date <- as.Date(dis$Date,format = "%d/%m/%Y")
 dis_long <- gather(dis, Station, Disch, LAE01.mm:LAE03.mm, factor_key=TRUE)
 #rename station to inlet and outlet
 dis_long$Station <- revalue(dis_long$Station, c("LAE01.mm" = "Outlet", "LAE03.mm" = "Inlet"))
-head(dis_long)
-head(dx_ts)
 
 yp <- left_join(dx_ts, dis_long, by = c("Station", "Date"))
 yp$Year=format(as.Date(yp$Date, format="%d.%m.%Y"),"%Y")
-
 ```
 
-## t-test 30.03.2026
-
-```{r}
-library(rstatix)
+## Boxplots and t-testing
+```{r Boxplots}
 # Pairwise comparisons
-
 #suva not significantly different inlet and outlet, but what about during summer only?
 # Values to keep
 summer <- c( 6, 7, 8)
 
-# Remove rows where the city is in the cities_to_remove vector
+# Remove rows 
 filtered_dx2 <- dx2[(dx2$month %in% summer), ]
 
-
-library("ggpubr")
 class(HMW$sUVa)
 ggboxplot(yp, x = "Station", y = "TOC_m", 
           color = "Station", palette = c("#00AFBB", "#E7B800"),
@@ -836,62 +321,6 @@ pwc1
 pwc2
 pwc3
 pwc4
-
- 
-
-pwc6 <- y16 %>%
-  pairwise_t_test(sUVa_m ~ Station, paired=FALSE, alternative= "two.sided")
-pwc7 <- y16 %>%
-  pairwise_t_test(E2_E3_m ~ Station, paired=FALSE, alternative= "two.sided")
-pwc6
-pwc7
-
-```
-
-```{r}
-yp$Year=format(as.Date(yp$Date, format="%d.%m.%Y"),"%Y")
-
-ggplot(subset(yp, Station=="Inlet"))+
-  #geom_point(aes(x=Date, y=Disch), size=5)+
-  geom_line(aes(x=Date, y=Disch, colour=Station))+
-  #geom_point(aes(x=Date, y=TOC_m), colour="black")+
-  #geom_smooth(aes(x=Date, y=Disch, colour=Station), shape=16, size=1)+
-  #geom_point(aes(x=month_day, y=DOC_s, colour=Station), shape=17, size=5)+
-  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
-  theme_bw()+
-  labs(y = "TOC (mg/L)")+
-   theme(
-    legend.text = element_text(size = 14),
-    legend.title = element_text(size = 14),
-    axis.text.x = element_text(size=12, angle = 45, hjust = 1),
-    axis.text.y = element_text(size=12),
-    strip.text = element_text(size = 12),
-    axis.title.x = element_blank(),
-    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0))
-  )+
-  facet_grid(.~ Year, scales="free")+
-  scale_y_log10()
-
-
-ggplot(subset(yp, Year %in% c(2016, 2017, 2018, 2019, 2020, 2021)))+
-  geom_line(aes(x=Date, y=Disch, shape=Station, colour=Station), size=1)+
-  geom_point(aes(x=Date, y=Disch, shape=Station, colour=Station), size=2)+
-  #geom_line(aes(x=month_day, y=TOC_m, colour=Station))+
-  #geom_smooth(aes(x=Date, y=Disch, colour=Station), shape=16, size=1)+
-  #geom_point(aes(x=month_day, y=DOC_s, colour=Station), shape=17, size=5)+
-  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
-  theme_bw()+
-  labs(y = "TOC (mg/L)")+
-   theme(
-    legend.text = element_text(size = 14),
-    legend.title = element_text(size = 14),
-    axis.text.x = element_text(size=12, angle = 45, hjust = 1),
-    axis.text.y = element_text(size=12),
-    strip.text = element_text(size = 12),
-    axis.title.x = element_blank(),
-    axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0))
-  )+
-  facet_grid(.~ Year, scales="free")
 ```
 
 Looking at the data without decomposing
@@ -909,9 +338,6 @@ ggplot(yp)+
 Timeline, seasonality and correlations
 - first, regularize the data (do we need to different since less Hg data?)
 - seasonal decomposition
-- correlation analysis
-- keep in mind possible lag in time
-- Hg shorter time frame than TOC
 ```{r Decompose}
 dx_ts_inlet <- subset(yp, Station == "Inlet") #daily?
 dx_ts_outlet <- subset(yp, Station == "Outlet") #daily?
@@ -927,7 +353,6 @@ new_ts_out <- merge(full_out, dx_ts_outlet, by = "Date", all.x = TRUE)
 new_ts_in <- merge(full_in, dx_ts_inlet, by = "Date", all.x = TRUE)
 
 # 3. Some values are now missing - replace them with 0
-#library(zoo)
 #For TOC and sUVa 
 new_ts_out1 <- new_ts_out[c(1:2189),] #Specify dates to be included to avoid leading or ending NAs
 new_ts_in1 <- new_ts_in[c(1:2165),]    #Specify dates to be included to avoid leading or ending NAs
@@ -986,7 +411,6 @@ C1_inl <- ts(new_ts_in3, frequency=365)  #Discharge data inlet
 D1_out <- ts(new_ts_out4, frequency=365) #Discharge data outlet
 D1_inl <- ts(new_ts_in4, frequency=365)  #Discharge data inlet
 
-library(stats)
 #decomp <- stl(A1_out[,5], s.window = "periodic") #date is not on x axis
 res1<- (stl(ts(A1_out[,9],frequency=365,start=c(2016,2 )),s.window="periodic",robust=TRUE) )#fixes date. TOC outlet
 res2<- (stl(ts(A1_inl[,9],frequency=365,start=c(2016,31)),s.window="per",robust=TRUE) )#fixes date. TOC inlet
@@ -1011,7 +435,6 @@ plot(res5)+title("Langtjern sUVa outlet")
 plot(res6)+title("Langtjern sUVa inlet")
 plot(res7)+title("Langtjern water discharge outlet")
 plot(res8)+title("Langtjern water discharge inlet")
-
 plot(res9)+title("Langtjern Hg:DOC outlet")
 plot(res10)+title("Langtjern Hg:DOC inlet")
 
@@ -1026,7 +449,6 @@ sUVa_out <- as.data.frame(res5$time.series)
 sUVa_in <- as.data.frame(res6$time.series)
 dis_out <- as.data.frame(res7$time.series)
 dis_in <- as.data.frame(res8$time.series)
-
 THgDOC_out <- as.data.frame(res9$time.series)
 THgDOC_in <- as.data.frame(res10$time.series)
 
@@ -1043,7 +465,6 @@ num_periods5 <- nrow(sUVa_out) # Match the number of rows in the dataframe. sUVa
 num_periods6 <- nrow(sUVa_in) # Match the number of rows in the dataframe. sUVa
 num_periods7 <- nrow(dis_out) # Match the number of rows in the dataframe. discharge
 num_periods8 <- nrow(dis_in) # Match the number of rows in the dataframe. discharge
-
 num_periods9 <- nrow(THgDOC_out) # Match the number of rows in the dataframe. discharge
 num_periods10 <- nrow(THgDOC_in) # Match the number of rows in the dataframe. discharge
 
@@ -1058,7 +479,6 @@ date_sequence5 <- seq(from = start_date2, by = frequency, length.out = num_perio
 date_sequence6 <- seq(from = start_date2, by = frequency, length.out = num_periods6)
 date_sequence7 <- seq(from = start_date2, by = frequency, length.out = num_periods7)
 date_sequence8 <- seq(from = start_date2, by = frequency, length.out = num_periods8)
-
 date_sequence9 <- seq(from = start_date2, by = frequency, length.out = num_periods9)
 date_sequence10 <- seq(from = start_date2, by = frequency, length.out = num_periods10)
 
@@ -1071,7 +491,6 @@ sUVa_out$Date <- date_sequence5
 sUVa_in$Date <- date_sequence6
 dis_out$Date <- date_sequence7
 dis_in$Date <- date_sequence8
-
 THgDOC_out$Date <- date_sequence9
 THgDOC_in$Date <- date_sequence10
 
@@ -1107,7 +526,7 @@ outlet4 <- merge(outlet3x[, c("Date", "seasonal_TOC", "trend_TOC", "remainder_TO
             THgDOC_out[, c("Date", "seasonal", "trend", "remainder")],
             by = "Date", suffixes = c("_THgDOC"))
 
-#REPEAT THE SAME TILPASNINGER HERE AS FOR OUTLET
+#REPEAT THE SAME AdAPTATIONS HERE AS FOR OUTLET
 inlet <- merge(TOC_in[, c("Date", "seasonal", "trend", "remainder")],
             Hg_in[, c("Date", "seasonal", "trend", "remainder")],
             by = "Date", suffixes = c("_TOC", "_Hg"))
@@ -1140,41 +559,24 @@ inlet4 <- merge(inlet3x[, c("Date", "seasonal_TOC", "trend_TOC", "remainder_TOC"
             THgDOC_in[, c("Date", "seasonal", "trend", "remainder")],
             by = "Date", suffixes = c("_THgDOC"))
 
-#SEASONAL - out
-cor(outlet$seasonal_TOC, outlet$seasonal_Hg, use = "complete.obs")
-plot(outlet$seasonal_TOC, outlet$seasonal_Hg, use = "complete.obs")
-
-cor(inlet$seasonal_TOC, inlet$seasonal_Hg, use = "complete.obs")
-plot(inlet$seasonal_TOC, inlet$seasonal_Hg, use = "complete.obs")
-
-cor(inlet3$seasonal_TOC, inlet$seasonal_dis, use = "complete.obs")
-plot(inlet3x$seasonal_TOC, inlet3x$seasonal_dis, use = "complete.obs")
-
-
-#TREND
-cor(outlet$trend_TOC, outlet$trend_Hg, use = "complete.obs")
-plot(outlet$trend_TOC, outlet$trend_Hg, use = "complete.obs")
-
-cor(inlet$trend_TOC, inlet$trend_Hg, use = "complete.obs")
-plot(inlet$trend_TOC, inlet$trend_Hg, use = "complete.obs")
-
 ```
 
-
+## Plot decomposed data
+Figure 2
 ```{r Plot decomposed data}
 #NEED YEAR
 inlet4$Year=format(as.Date(inlet$Date, format="%d.%m.%Y"),"%Y")
 outlet4$Year=format(as.Date(outlet$Date, format="%d.%m.%Y"),"%Y")
 
 #SEASONAL
-ggplot(subset(outlet4, Year == 2018))+
+ggplot(subset(outlet4, Year == 2018))+  #, Year == 2018
   geom_line(aes(x=Date, y=seasonal_dis, colour="seasonal_dis"), linetype = "dashed", linewidth=1.5)+
   geom_line(aes(x=Date, y=seasonal_Hg, colour="seasonal_Hg"), linewidth = 1.5)+
   geom_line(aes(x=Date, y=seasonal_sUVa, colour="seasonal_sUVa"), linewidth = 1.5)+
   geom_line(aes(x=Date, y=seasonal_TOC, colour="seasonal_TOC"), linewidth = 1.2)+
   #geom_line(aes(x=Date, y=seasonal, colour="seasonal"))+
   scale_x_date(
-    date_breaks = "1 month", # Sets a major tick mark every month
+    date_breaks = "1 month", # Sets a major tick mark every month  #1 month
     date_labels = "%b"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
   )+
    theme_bw()+
@@ -1182,36 +584,18 @@ ggplot(subset(outlet4, Year == 2018))+
         axis.text.y = element_text(size= 17, colour="black"),
         axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0), size=17, colour="black"),        
         axis.title.x = element_blank(),        
-        legend.text = element_blank(),#size = 12, colour="black"
+        legend.text = element_text(size=17),#size = 12, colour="black"
         plot.title = element_text(size = 20))+
-  ggtitle("Outlet - seasonal")+
-  ylab("Seasonal component (centered)")+
+  ggtitle("Outlet")+
+  ylab("Seasonal component")+
   scale_colour_manual("", 
-                      labels = c("DOC","sUVa254",  "Hg", "Water discharge"),
+                      labels = c("DOC","sUVa254",  "Hg", "Q"),
                       breaks = c("seasonal_TOC","seasonal_sUVa", "seasonal_Hg", "seasonal_dis"),
                       values = c("brown","orange","red", "blue")) +
-  scale_y_continuous(labels = label_number(accuracy = 0.1))
-   bnscale_y_log10()
+  scale_y_continuous(labels = label_number(accuracy = 0.1))+
+  ylim(-5, 5)
   
-  
-
-  #  scale_colour_discrete(name = "Dose", labels = c("Hg", "sUVa254", "TOC", "Water discharge"))
-
-  
-ggplot(outlet4)+
-  geom_line(aes(x=Date, y=seasonal_Hg), colour="red")+
-  geom_line(aes(x=Date, y=seasonal_sUVa), colour="orange")+
-  geom_line(aes(x=Date, y=seasonal), colour="purple")+
-  #geom_line(aes(x=Date, y=seasonal_TOC), colour="darkgreen")+
-  #geom_line(aes(x=Date, y=seasonal_dis), colour="blue")+
-  scale_x_date(
-    date_breaks = "2 month", # Sets a major tick mark every month
-    date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
-  )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-  ggtitle("Outlet - seasonal")+
-  theme(axis.title = element_blank())
-  scale_y_log10()
+   #bnscale_y_log10()
 
 #TREND
 ggplot(inlet3x)+
@@ -1242,47 +626,14 @@ ggplot(outlet3x)+
   theme(axis.title = element_blank())+
   scale_y_log10()
 
-#DATA
-ggplot(inlet3x)+
-  geom_line(aes(x=Date, y=remainder_Hg), colour="red")+
-  geom_line(aes(x=Date, y=remainder_sUVa), colour="orange")+
-  geom_line(aes(x=Date, y=remainder_TOC), colour="darkgreen")+
-  geom_line(aes(x=Date, y=remainder_dis), colour="blue")+
-  scale_x_date(
-    date_breaks = "4 month", # Sets a major tick mark every month
-    date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
-  )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-  ggtitle("Inlet - remainder")+
-  theme(axis.title = element_blank())+
-  scale_y_log10()
-
-ggplot(outlet3x)+
-  geom_line(aes(x=Date, y=remainder_Hg), colour="red")+
-  geom_line(aes(x=Date, y=remainder_sUVa), colour="orange")+
-  geom_line(aes(x=Date, y=remainder_TOC), colour="darkgreen")+
-  geom_line(aes(x=Date, y=remainder_dis), colour="blue")+
-  scale_x_date(
-    date_breaks = "4 month", # Sets a major tick mark every month
-    date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
-  )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-  ggtitle("Outlet - remainder")+
-  theme(axis.title = element_blank())+
-  scale_y_log10()
-
-
-
-
-
 
 #residual1  
 ggplot(outlet3x)+
-  geom_line(aes(x=Date, y=remainder_TOC), colour="red")+
+  geom_line(aes(x=Date, y=remainder_TOC), colour="red")
   geom_line(aes(x=Date, y=remainder_dis))
 
 ggplot(inlet)+
-  geom_line(aes(x=Date, y=remainder_TOC), colour="red")+
+  geom_line(aes(x=Date, y=remainder_TOC), colour="red")
   geom_line(aes(x=Date, y=remainder_Hg))
 
 #seasonal
@@ -1313,332 +664,24 @@ ggplot(inlet2)+
   geom_line(aes(x=Date, y=remainder))
 
 
-
-#seasonal
-ggplot(outlet2)+
-  geom_line(aes(x=Date, y=seasonal_Hg))+
-  geom_line(aes(x=Date, y=seasonal), colour="red")+
-  scale_x_date(
-    date_breaks = "4 month", # Sets a major tick mark every month
-    date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
-  )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-   ggtitle("Outlet: sUVa (red)~Hg (black)")
-
-ggplot(inlet2)+
-  geom_line(aes(x=Date, y=seasonal_Hg))+
-  geom_line(aes(x=Date, y=seasonal), colour="red")+
-  scale_x_date(
-    date_breaks = "2 month", # Sets a major tick mark every month
-    date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
-  )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-   ggtitle("Inlet: sUVa (red)~Hg (black)")
-
-
-#MERGE inlet and outlet to have in the same figure
-Langtjern <- merge(inlet4, outlet4, by="Date")
-
-#Seasonal: inlet and outlet together
-ggplot(Langtjern)+
-  geom_line(aes(x=Date, y=seasonal_TOC.x))+
-  geom_line(aes(x=Date, y=seasonal_TOC.y), colour="blue")+
-  scale_x_date(
-    date_breaks = "4 month", # Sets a major tick mark every month
-    date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
-  )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-   ggtitle("TOC: inlet (black)~ outlet (blue)")
-
-ggplot(Langtjern)+
-  geom_line(aes(x=Date, y=seasonal_dis.x))+
-  geom_line(aes(x=Date, y=seasonal_dis.y), colour="blue")+
-  scale_x_date(
-    date_breaks = "4 month", # Sets a major tick mark every month
-    date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
-  )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-   ggtitle("Dis: inlet (black)~ outlet (blue)")
-
-ggplot(Langtjern)+
-  geom_line(aes(x=Date, y=seasonal_Hg.x))+
-  geom_line(aes(x=Date, y=seasonal_Hg.y), colour="blue")+
-  scale_x_date(
-    date_breaks = "4 month", # Sets a major tick mark every month
-    date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
-  )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-   ggtitle("Hg: inlet (black)~ outlet (blue)")
-
-ggplot(Langtjern)+
-  geom_line(aes(x=Date, y=seasonal_sUVa.x))+
-  geom_line(aes(x=Date, y=seasonal_sUVa.y), colour="blue")+
-  scale_x_date(
-    date_breaks = "4 month", # Sets a major tick mark every month
-    date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
-  )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-   ggtitle("sUVa: inlet (black)~ outlet (blue)")
-
-
-ggplot(Langtjern)+
-  geom_line(aes(x=Date, y=seasonal_Hg.x))+
-  geom_line(aes(x=Date, y=seasonal_Hg.y), colour="blue")+
-  scale_x_date(
-    date_breaks = "4 month", # Sets a major tick mark every month
-    date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
-  )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-   ggtitle("Hg: inlet (black)~ outlet (blue)")
-
-ggplot(Langtjern)+
-  geom_line(aes(x=Date, y=seasonal_dis.x))+
-  geom_line(aes(x=Date, y=seasonal_dis.y), colour="blue")+
-  scale_x_date(
-    date_breaks = "4 month", # Sets a major tick mark every month
-    date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
-  )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-   ggtitle("Discharge: inlet (black)~ outlet (blue)")
-
-
-
-
-
-#seasonalXXXXX
-ggplot(outlet2)+
-  geom_line(aes(x=Date, y=seasonal_TOC), colour="blue")+
-  geom_line(aes(x=Date, y=seasonal), colour="green")+
-  scale_x_date(
-    date_breaks = "4 month", # Sets a major tick mark every month
-    date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
-  )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-   ggtitle("Outlet: sUVa (green)~TOC (blue)")
-
-ggplot(inlet2)+
-  geom_line(aes(x=Date, y=seasonal_TOC), colour="blue")+
-  geom_line(aes(x=Date, y=seasonal), colour="green")+
-  scale_x_date(
-    date_breaks = "4 month", # Sets a major tick mark every month
-    date_labels = "%b %Y"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
-  )+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-   ggtitle("Inlet: sUVa (red)~Hg (black)")
-
-
-
-#trend
-ggplot(outlet2)+
-  geom_line(aes(x=Date, y=trend_Hg), colour="red")+
-  geom_line(aes(x=Date, y=trend))
-
-ggplot(inlet2)+
-  geom_line(aes(x=Date, y=trend_Hg), colour="red")+
-  geom_line(aes(x=Date, y=trend))
-
-#residual  
-ggplot(outlet2)+
-  geom_line(aes(x=Date, y=remainder_Hg), colour="red")+
-  geom_line(aes(x=Date, y=remainder))
-
-ggplot(inlet2)+
-  geom_line(aes(x=Date, y=remainder_Hg), colour="red")+
-  geom_line(aes(x=Date, y=remainder))
-
-
-
-library("ggpubr")
-head(dx)
-ggscatter(outlet2, y = "seasonal_Hg", x = "seasonal_TOC", 
-          add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.method = "pearson", title="outlet")
-          xlab ="Molecular SIze (sUVa)" , ylab ="THg:DOC (ng/mg)")
-
-  ggscatter(inlet2, y = "seasonal_Hg", x = "seasonal_TOC", 
-          add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.method = "pearson", title="inlet")
-          xlab ="Molecular SIze (sUVa)" , ylab ="THg:DOC (ng/mg)")
-
-  ggscatter(outlet2, y = "seasonal_Hg", x = "seasonal", 
-          add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.method = "pearson", title="outlet")
-          xlab ="Molecular SIze (sUVa)" , ylab ="THg:DOC (ng/mg)")
-
-  ggscatter(inlet2, y = "seasonal_Hg", x = "seasonal", 
-          add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.method = "pearson", title="inlet")
-          xlab ="Molecular SIze (sUVa)" , ylab ="THg:DOC (ng/mg)")
-  facet_grid(.~Station)
-
-
-  
-  
-ggscatter(outlet2, y = "trend_Hg", x = "trend_TOC", 
-          add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.method = "pearson", title="outlet")
-          xlab ="Molecular SIze (sUVa)" , ylab ="THg:DOC (ng/mg)")
-
-  ggscatter(inlet2, y = "trend_Hg", x = "trend_TOC", 
-          add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.method = "pearson", title="inlet")
-          xlab ="Molecular SIze (sUVa)" , ylab ="THg:DOC (ng/mg)")
-
-  ggscatter(outlet2, y = "trend_Hg", x = "trend", 
-          add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.method = "pearson", title="outlet")
-          xlab ="Molecular SIze (sUVa)" , ylab ="THg:DOC (ng/mg)")
-
-  ggscatter(inlet2, y = "trend_Hg", x = "trend", 
-          add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.method = "pearson", title="inlet")
-          xlab ="Molecular SIze (sUVa)" , ylab ="THg:DOC (ng/mg)")
-  facet_grid(.~Station)
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-
-
-
-cor(inlet$seasonal_TOC, outlet$seasonal_TOC, use = "complete.obs", by="Date")
-
-
-cor(outlet$seasonal_TOC, inlet$seasonal_TOC) 
-nrow(outlet)
-
-
-#extract to assess correlation
-TOC_o_s1 <- decomposed_TOC_out$seasonal;  TOC_o_t1 <- decomposed_TOC_out$trend;  TOC_o_r1 <- decomposed_TOC_out$random
-TOC_i_s2 <- decomposed_TOC_in$seasonal;  TOC_o_t2 <- decomposed_TOC_in$trend;  TOC_o_r2 <- decomposed_TOC_in$random
-
-Hg_o_s1 <- decomposed_Hg_out$seasonal;  Hg_o_t1 <- decomposed_Hg_out$trend;  Hg_o_r1 <- decomposed_Hg_out$random
-Hg_i_s2 <- decomposed_Hg_in$seasonal;  Hg_i_t2 <- decomposed_Hg_in$trend;  Hg_i_r2 <- decomposed_Hg_in$random
-
-#Compensate for shorter Hg
-n <- min(length(Hg_o_s1), length(TOC_o_s1))
-ts1_cut <- Hg_o_s1[1:n]
-ts2_cut <- TOC_o_s1[1:n]
-
-cor(ts1_cut, ts2_cut, use = "complete.obs")
-plot(ts1_cut, ts2_cut)
-
-df_TOC_out <- as.data.frame(decomposed_TOC_out[c("x", "seasonal", "trend", "random")])
-df_TOC_in <- as.data.frame(decomposed_TOC_in[c("x", "seasonal", "trend", "random")])
-df_THg_out <- as.data.frame(decomposed_Hg_out[c("x", "seasonal", "trend", "random")])
-df_THg_in <- as.data.frame(decomposed_Hg_in[c("x", "seasonal", "trend", "random")])
-
-ggplot(df_TOC_out)
-
-
-
-library(dplyr)
-TOC_o_s1x <- as.numeric(TOC_o_s1)
-Hg_o_s1x <- as.numeric(Hg_o_s1)
-joined_data <- inner_join(TOC_o_s1x, Hg_o_s1x, by = "Date")
-
-print(joined_data)
-
-cor.test(as.numeric(ts1_shortened), as.numeric(ts2_shortened), method = "pearson")
-plot(as.numeric(TOC_o_s1), as.numeric(Hg_o_s1))
-
-
-#contniue here!!! get date back to data and look at correlation
-
-#correlate trends
-#https://www.datascienceinstitute.net/ai-data-science-blog/time-series-decomposition-in-r
-
-
-
-
-
-#simple plots
-qplot(x=Date, y=TOC_m, data=dx_ts)+
-  facet_grid(Station~.)
-qplot(x=Date, y=THg_m, data=dx_ts)+
-  facet_grid(Station~.)
-
-#convert to ts time series format which is basic R
-library(stats) 
-# Unleash the time series magic!
-ts_sales <- ts(dx_ts$TOC_m, frequency = 365)  # Daily data
-
-# Admire your creation:
-print(ts_sales)
-
-
-plot(TOC_m_df, type="l")
-plot(dx$TOC, type="l")
-
-
 #TIMELINE VISUALISATION: https://www.r-bloggers.com/2023/11/time-series-analysis-in-r-how-to-read-and-understand-time-series-data/
-typeof(dx$THg_m)
-#TOC )2016 - 2026
-ggplot(dx, aes(x = Date, y = TOC_m)) +
-  geom_line()+
-  facet_grid(Station~.)
-
-#Hg (2016-2022)
-ggplot(filter(dx, !is.na(THg_m)), aes(x = Date, y = THg_m)) +
-  geom_line()+
-  facet_grid(Station~.)
-
-library(zoo)
-
-
-# Create a numeric feature
-dx$month_num <- as.numeric(dx$month)
-
-# Fit a linear regression model
-model <- lm(TOC_m ~ Month_num, data = dx)
-# Get predictions
-data$Trend_Line <- predict(model, newdata = data)
-
-head(data[c("Month", "Passengers", "Trend_Line")], 12)
-    
 #https://a-little-book-of-r-for-time-series.readthedocs.io/en/latest/src/timeseries.#html
 
-plot.ts(dx$TOC_m)
 
-#We can see from the time plot that this time series could probably be described #using an additive model, since the random fluctuations in the data are roughly #constant in size over time.
-TOC_m_df <- dx[,c(4:5)]
-plot.ts(TOC_m_df)
-
-TOC_m_df2 <- na.omit(TOC_m_df)
-
-TOC_m_ts <- ts(TOC_m_df, frequency=12)
-TOC_m_df
-birthstimeseriescomponents <- decompose(TOC_m_ts)
+#library(zoo)
 
 ```
 
 ## Sumamry table
 ```{r create summary table}
-library(dplyr)
-library(rbind)
-
 dxy <- do.call(rbind.data.frame, dx)
-
 dxz <- subset(dx, Year %in% c(2016, 2017, 2018, 2019, 2020, 2021))
-
-#dx_sum <- dx[c("Station", "TOC_m", "THg_m", "sUVa_m", "THg_m")]
 dx_sum <- select(dxz, "Station", "TOC_m", "THg_m", "sUVa_m", "THg_m", "THGTOC_m2", "Year", "month")
-
-typeof(dx_sum)
-class(dx_sum$TOC_m)
 
 inl <- subset(dx_sum, Station  == "Inlet")
 ou <- subset(dx_sum, Station  == "Outlet")
-#length(inl$THgTOC_m, na.omit=TRUE)
 
 colSums(!is.na(ou))
-
 nrow(inl)
 
 inl %>% count(THg_m)
@@ -1646,10 +689,6 @@ inl %>% count(THg_m)
 sum <- dx_sum %>% 
   group_by(Station, month) %>% 
   summarise(across(.cols  = where(is.numeric), .f = list(mean = mean, min = min, max = max, sd = sd), na.rm = TRUE))
-  
-#sum_n <- dx_sum %>% 
-#  group_by(Station) %>% 
-#  length(across(.cols  = where(is.numeric)))
 
 sum_n <- dx_sum %>% 
 group_by(Station, month) %>%
@@ -1714,14 +753,11 @@ Gdx_out <-yp %>% filter(Station == "Outlet") %>%
     Q_sc = scale(Disch),             # if available
     site = factor(Station)
   )
-
-#library(mgcv)
 ```
 
-##GAMM - WITH DISCHARGE MANUSCRIPT
+##GAMM - WITH DISCHARGE
 SIMPLE MODEL
-```{r}
-#library(nlme)
+```{r simple model - GAMM}
 m1_gamm_inl <- gamm(
   lnHg ~ s(lnTOC, k = 6, bs = "cs") +
          s(sUVa_sc, k = 6, bs = "cs") +
@@ -1790,17 +826,15 @@ concurvity(m1_gamm_inl$gam, full = TRUE)
 # Summary of mixed model (AR1, random effects)
 summary(m1_gamm_inl$lme)
 
-
 # Nicer plots
 #library(gratia)
 draw(m1_gamm_inl$gam)
 draw(m1_gamm_out$gam)
-
 ```
 
-Seasonality
+Seasonality included
 -  If you want shrinkage/automatic removal of weak smooths, use a shrinkage basis (bs="cs"
-```{r}
+```{r seasonality included - GAMM}
 Gdx3_inl <- Gdx_inl %>%
   mutate(season = case_when(
     doy %in%  90:151 ~ "spring",     # adjust to local hydrology (snowmelt)
@@ -1818,9 +852,6 @@ Gdx3_out <- Gdx_out %>%
     TRUE             ~ "winter"
   )) %>%
   mutate(season = factor(season, levels = c("winter","spring","summer","autumn")))
-
-#library(mgcv)
-#library(nlme)
 
 m2_gamm_inl <- gamm(
   lnHg ~ season +                                  # gives each season its Hg-intercepts
@@ -1841,7 +872,6 @@ gam.check(m2_gamm_inl$gam)
 acf(resid(m2_gamm_inl$lme, type = "normalized"), lag.max = 24)
 # Concurvity
 concurvity(m1_gamm_inl$gam, full = TRUE)
-
 
 m2_gamm_out <- gamm(
   lnHg ~ season +                                  # gives each season its Hg-intercepts
@@ -1864,193 +894,42 @@ acf(resid(m2_gamm_out$lme, type = "normalized"), lag.max = 24)
 # Concurvity
 concurvity(m1_gamm_out$gam, full = TRUE)
 
-
-
-1# Nicer plots
-#library(gratia)
+# Nicer plots
 draw(m2_gamm_inl$gam)
 draw(m2_gamm_out$gam)
-
 
 ```
 
 
 
+FOR graåphical abstract
+```{r}
+#SEASONAL
+ggplot(subset(inlet4))+  #, Year == 2018
+  geom_line(aes(x=Date, y=seasonal_dis, colour="seasonal_dis"), linetype = "dashed", linewidth=1.5)+
+  geom_line(aes(x=Date, y=seasonal_Hg, colour="seasonal_Hg"), linewidth = 1.5)+
+  geom_line(aes(x=Date, y=seasonal_sUVa, colour="seasonal_sUVa"), linewidth = 1.5)+
+  geom_line(aes(x=Date, y=seasonal_TOC, colour="seasonal_TOC"), linewidth = 1.2)+
+  #geom_line(aes(x=Date, y=seasonal, colour="seasonal"))+
+  scale_x_date(
+    date_breaks = "3 month", # Sets a major tick mark every month  #1 month
+    date_labels = "%b"    # Formats the labels as 'Jan 2023', 'Feb 2023', etc.
+  )+
+   theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size= 14, colour="black"),
+        axis.text.y = element_text(size= 14, colour="black"),
+        axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0), size=14, colour="black"),        
+        axis.title.x = element_blank(),        
+        legend.text = element_text(size=15),#size = 12, colour="black"
+        plot.title = element_text(size = 17))+
+  ggtitle("Inlet - seasonal")+
+  ylab("Seasonal component (centered)")+
+  scale_colour_manual("", 
+                      labels = c("DOC","sUVa254",  "Hg", "Water discharge"),
+                      breaks = c("seasonal_TOC","seasonal_sUVa", "seasonal_Hg", "seasonal_dis"),
+                      values = c("brown","orange","red", "blue")) +
+  scale_y_continuous(labels = label_number(accuracy = 0.1))+
+  theme(legend.position = "top")
+   bnscale_y_log10()
+```
 
-
-  
-#geom_point(aes(x=Date, y=sUVa_s, colour=Station), size=5, shape=17)+
-geom_smooth(aes(x=Date, y=sUVa_s, colour=Station), size=2)
-#Correlation plots
-library("ggpubr")
-head(dx)
-ggscatter(dx, x = "sUVa_m", y = "sVISa_m", 
-          add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.method = "pearson",
-          xlab ="Molecular SIze (sUVa)" , ylab ="THg:DOC (ng/mg)")
-  facet_grid(.~Station)
-    facet_grid(.~year(dx$Date), scales="free_x")
-    
-head(dx)
-    #IMPORTANT!!! Correlation plot for Hg and DOM 
-    ggplot(inlet, aes(labile_m, THGTOC_m))+
-      geom_point(size=6)+
-      geom_smooth(method = "lm", se = FALSE, colour="black")
-      facet_grid(. ~ factor(Station), scales="free")
-      xlim(4, 6)
-      
-      inlet <- subset(dx, Station == "Inlet")
-      outlet <- subset(dx, Station == "Outlet")
-    head(dx)
-      #Correlation analysis
-      library(dplyr)
-      b <- select(dx, TOC_m, THg_m, MeHg_m, sUVa_m, sVISa_m, SAR_m, THg_m, labile_m, THGTOC_m, MeHGTOC_m)
-      library(Hmisc)
-      rcorr(as.matrix(b), type="pearson")
-      class(d)
-      library("PerformanceAnalytics")
-      chart.Correlation(b, histogram=TRUE, pch=19)
-      head(d)
-      
-      
-      #MAKKING THE CORRELATION ASSESSMENT
-      library(tidyverse)
-      library(ggpubr)
-      theme_set(theme_pubr())
-      ggplot(outlet, aes(x = SAR_m, y = THGTOC_m)) +
-        geom_point() +
-        stat_smooth()+
-        stat_smooth(method = lm)
-      
-model <- lm(THGTOC_m ~ sVISa_m, data = dx)
-model  
-summary(model)
-
-
-
-#STATISTICAL TESTING
-res.aov <- aov(THGTOC_m ~ Station, data = dx)
-# Summary of the analysis
-summary(res.aov)
-TukeyHSD(res.aov)
-
-
-
-
-
-
-
-#Correlation with SENSOR LAKE DATA
-dy <- read.table("Langtjern_weather.txt", sep = "\t", header = TRUE) #load data
-dy$Date <- as.Date(dy$SampleDate,format = "%d.%m.%Y") #convert to date column
-df <- dy[ -c(1:5) ] #removed uneccesary columns
-head(df)
-
-#to make monthly summaries
-dff = df %>%
-  mutate(month = format(Date, "%m"), year = format(Date, "%Y")) %>%
-  group_by(month, year) %>%
-  summarise(sun = mean(Straaling),
-            airT = mean(AirTemp),
-            Prec = mean(Precip),
-            Hum = mean(Humidity))
-
-plot(dff)
-head(dff)
-#Aggreger per dag
-library(dplyr)
-(out <- df %>%
-    group_by(Date) %>%
-    summarize(Sun=sum(Straaling), 
-              Precip=sum(Precip),
-              Precip_ave=mean(Precip),
-              AirTemp=mean(AirTemp),
-              Humidity = mean(Humidity)))
-
-head(df)
-
-#PLOTTING with time on x-axis and year-facets
-ggplot(out)+
-  geom_point(aes(x=Date, y=Precip), shape=16, size=5)
-  geom_smooth(aes(x=Date, y=Precip), shape=16, size=2)+
-  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
-  facet_grid(.~year(dx$Date), scales="free_x")+
-  theme_bw()
-ylim(2.5, 6)
-scale_y_continuous(limit=c(3, 4))
-geom_point(aes(x=Date, y=labile_s, colour=Station), shape=17, size=5)+
-  head(dx)
-
-
-
-
-
-
-ou <- head(out)
-dfff <- na.omit(dff)
-head(dfff)
-ou = dfff
-nrow(sun)
-head(ou)
-#Make indivudual datafiles as ts with correct frequency
-sun <- ts(ou$sun, frequency=12, start=2016, end=2019)
-pre <- ts(ou$Prec, frequency=12, start=2016, end=2019)
-airT <- ts(ou$airT, frequency=12, start=2016, end=2019)
-Humi <- ts(ou$Hum, frequency=12, start=2016, end=2019)
-
-plot(sunny)
-sunny <- decompose(sun)
-precip <- decompose(pre)
-AirTemp <- decompose(airT)
-Humidity <- decompose(Humi)
-plot(Humidity)
-plot(AirTemp)
-plot(precip)
-plot(sunny)
-ts.plot(pre)
-
-#then YOU CAN SUBTRACT E.G. THE SEAOSNAL COMPONENT FROM THE DATA
-birthsSeasonAdj <- sun - sunny$seasonal- sunny$random
-plot.ts(birthsSeasonAdj)
-
-#Make correspodning individual ts with correct frequency
-#here we have inlet and outlet. can look at these individually and at the difference bwteen the two
-newdata <- subset(dx,  Station =="Outlet")
-sUVa <- na.omit(newdata$sUVa_m)
-sUVaTS <- ts(sUVa, frequency=365, start=2016, end=2019)
-
-decomsUVa <- decompose(sUVaTS)
-plot(decomsUVa)
-
-suva <- sUVaTS - decomsUVa$seasonal - decomsUVa$random
-plot.ts(suva)
-plot(suva~birthsSeasonAdj)
-
-abline(lm(suva~birthsSeasonAdj))
-
-ab <- lm(suva~birthsSeasonAdj)
-summary(ab)
-
-#What about doing monthly aggregates???
-
-
-
-
-
-
-
-
-#PLoT værdata med eventuelt langtjern data
-ggplot()+
-  geom_smooth(dx, mapping=aes(x=Date, y=Precip), shape=16, size=2)+
-  geom_point(dx, mapping=aes(x=Date, y=TOC_m, colour=Station), shape=16, size=3)
-  scale_x_date(labels = date_format("%b"),breaks = date_breaks("2 months"))+
-  scale_y_continuous(name = "Radiation", 
-                     sec.axis = sec_axis(~.*10, name = "TOC"))
-  facet_grid(.~year, scales="free_x")+
-  theme_bw()
-  
-
-linearMod <- lm(_m ~ TOC_m, data=dx)
-print(linearMod)
-summary(linearMod)
